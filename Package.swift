@@ -7,6 +7,7 @@ let package = Package(
   products: [
     .library(name: "WriteCore", targets: ["WriteCore"]),
     .library(name: "WriteCloud", targets: ["WriteCloud"]),
+    .library(name: "WriteMesh", targets: ["WriteMesh"]),
     .executable(name: "write-smoke", targets: ["WriteSmoke"]),
     .executable(name: "write-dev", targets: ["WriteDev"]),
   ],
@@ -22,6 +23,12 @@ let package = Package(
     // Live end-to-end run on the Mac: real cloud planner, Ollama standing in
     // for the device writer under the same limits. Never ships.
     .executableTarget(name: "WriteDev", dependencies: ["WriteCore", "WriteCloud"]),
+    // Portable multi-device coordination: task graph, versioned claim/lease
+    // protocol, coordinator and worker actors. Transport is abstracted; the
+    // MultipeerConnectivity adapter is Apple-only and lives outside this
+    // portable core.
+    .target(name: "WriteMesh", dependencies: ["WriteCore"]),
     .testTarget(name: "WriteCoreTests", dependencies: ["WriteCore"]),
+    .testTarget(name: "WriteMeshTests", dependencies: ["WriteMesh", "WriteCore"]),
   ]
 )
