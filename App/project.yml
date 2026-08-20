@@ -18,6 +18,12 @@ packages:
   mlx-swift:
     url: https://github.com/ml-explore/mlx-swift
     exactVersion: 0.31.3
+  # MLX Swift LM is provider-agnostic and ships no concrete Tokenizer. This
+  # supplies the one the manifest's tokenizer.json is written for. Pinned for
+  # the same reason as the rest: the tokenizer decides what the weights see.
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers
+    exactVersion: 1.3.3
 
 targets:
   NodeNetwork:
@@ -36,6 +42,8 @@ targets:
         product: MLXLLM
       - package: mlx-swift-lm
         product: MLXLMCommon
+      - package: swift-transformers
+        product: Transformers
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

@@ -8,9 +8,10 @@ import WriteCore
 
   /// `DeviceWriter` backed by MLX Swift LM running the pinned Qwen3-4B.
   ///
-  /// Isolated to `@MainActor` because `ChatSession` is not `Sendable`. That is
-  /// not a performance concern: generation is one long `await` on the GPU, so
-  /// the actor is idle for the duration rather than blocking the UI.
+  /// Load and unload are isolated to `@MainActor` so the weights are only ever
+  /// swapped from one place. That is not a performance concern: generation is
+  /// one long `await` on the GPU, so the actor is idle for the duration rather
+  /// than blocking the UI.
   ///
   /// Only available on physical devices. MLX needs a Metal GPU that the iOS
   /// simulator does not provide, which is why the simulator path uses the LAN
@@ -20,7 +21,14 @@ import WriteCore
     nonisolated var limits: DeviceLimits { MLXPolicy.limits }
 
     private var container: ModelContainer?
-    private var session: ChatSession?
+
+    /// Held outside the actor's isolation: `ChatSession` is not `Sendable` and
+    /// its `clear`/`respond` are `nonisolated async`, so reaching for it from
+    /// isolated storage would send a non-Sendable value across domains on every
+    /// call. Generation is instead done entirely off the actor, one call at a
+    /// time — which is the same single-threaded contract the KV-cache clearing
+    /// in `respond` already depends on.
+    private nonisolated(unsafe) var session: ChatSession?
 
     init() {
       MLX.GPU.set(memoryLimit: MLXPolicy.memoryLimitBytes)
@@ -39,7 +47,11 @@ import WriteCore
         id: MLXPolicy.allowedModel,
         revision: MLXPolicy.allowedModelRevision
       )
+      // MLX Swift LM is provider-agnostic: it supplies no downloader and no
+      // tokenizer, so both sides of the supply chain are ours to name.
       let loaded = try await loadModelContainer(
+        from: PinnedModelDownloader(),
+        using: PinnedTokenizerLoader(),
         configuration: configuration,
         useLatest: false
       ) { progressReport in
@@ -70,7 +82,7 @@ import WriteCore
       }
     }
 
-    private func respond(prompt: String, maxOutputTokens: Int) async throws -> String {
+    private nonisolated func respond(prompt: String, maxOutputTokens: Int) async throws -> String {
       guard let session else { throw MLXWriterError.notLoaded }
       let tokens = min(max(1, maxOutputTokens), MLXPolicy.limits.maxOutputTokens)
 
@@ -93,7 +105,7 @@ import WriteCore
       MLX.GPU.clearCache()
     }
 
-    private static func parameters(maxOutputTokens: Int) -> GenerateParameters {
+    private nonisolated static func parameters(maxOutputTokens: Int) -> GenerateParameters {
       GenerateParameters(
         maxTokens: maxOutputTokens,
         maxKVSize: MLXPolicy.limits.maxContextTokens,
