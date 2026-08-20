@@ -62,7 +62,18 @@ struct RootView: View {
     Panel(heading: "RUN") {
       Row(key: "host", value: model.host)
       Row(key: "planner", value: model.plannerModel)
-      Row(key: "writer", value: model.writerModel)
+      Row(
+        key: "writer",
+        value: model.backend == .onDevice ? MLXPolicy.allowedModel : model.writerModel
+      )
+      Row(
+        key: "backend",
+        value: model.backend.label,
+        tint: model.backend == .onDevice ? .green : .yellow
+      )
+      if !WriterBackend.supportsOnDevice {
+        Row(key: "on-device", value: WriterBackend.unavailableReason, tint: .secondary)
+      }
 
       HStack {
         Text(statusText)
@@ -82,6 +93,7 @@ struct RootView: View {
   private var statusText: String {
     switch model.phase {
     case .idle: return "idle"
+    case .loading: return "loading model \(Int(model.loadProgress * 100))%"
     case .planning: return "planning…"
     case .writing: return "writing \(model.sections.count) done"
     case .finished(let seconds): return "complete in \(seconds)s"

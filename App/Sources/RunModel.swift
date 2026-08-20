@@ -14,6 +14,7 @@ import WriteLAN
 final class RunModel {
   enum Phase: Equatable {
     case idle
+    case loading
     case planning
     case writing
     case finished(seconds: Int)
@@ -29,10 +30,36 @@ final class RunModel {
   var plannerModel: String = "33qwen:latest"
   var writerModel: String = "33qwen-local:latest"
 
+  var backend: WriterBackend = .default
+  /// Weight-download progress on first launch, 0...1. The pinned model is
+  /// ~2.3 GB; a silent first run looks like a hang.
+  var loadProgress: Double = 0
+
   private(set) var facts: FactMap?
+  #if canImport(MLX) && !targetEnvironment(simulator)
+    private let deviceWriter = MLXWriter()
+  #endif
 
   var isRunning: Bool {
-    phase == .planning || phase == .writing
+    phase == .loading || phase == .planning || phase == .writing
+  }
+
+  /// The writer for this run, honouring the selected backend.
+  private func makeWriter(base: URL) async throws -> any DeviceWriter {
+    switch backend {
+    case .lan:
+      return LANWriter(model: writerModel, baseURL: base)
+    case .onDevice:
+      #if canImport(MLX) && !targetEnvironment(simulator)
+        phase = .loading
+        try await deviceWriter.load { fraction in
+          Task { @MainActor [weak self] in self?.loadProgress = fraction }
+        }
+        return deviceWriter
+      #else
+        return MLXWriterUnavailable(reason: WriterBackend.unavailableReason)
+      #endif
+    }
   }
 
   func run() async {
@@ -49,9 +76,11 @@ final class RunModel {
     do {
       let facts = try Demo.facts()
       self.facts = facts
+      let writer = try await makeWriter(base: base)
+      phase = .planning
       let pipeline = WritePipeline(
         planner: LANPlanner(model: plannerModel, baseURL: base),
-        writer: LANWriter(model: writerModel, baseURL: base),
+        writer: writer,
         facts: facts,
         maxAttempts: 2
       )

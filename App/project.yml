@@ -8,6 +8,16 @@ options:
 packages:
   WriteKit:
     path: ..
+  # Pinned exactly, matching the audited 33io plugin. The model revision is
+  # pinned separately in MLXPolicy; neither follows a moving "latest".
+  mlx-swift-lm:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 3.31.3
+  # Pinned explicitly: mlx-swift-lm's range would otherwise float this to a
+  # version the 33io plugin never audited.
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.31.3
 
 targets:
   NodeNetwork:
@@ -22,6 +32,10 @@ targets:
         product: WriteMesh
       - package: WriteKit
         product: WriteLAN
+      - package: mlx-swift-lm
+        product: MLXLLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
