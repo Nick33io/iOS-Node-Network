@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    # The official image pins the toolchain exactly; setup actions track
+    # moving targets. write-smoke stands in for XCTest here so the invariants
+    # run even where Xcode never will.
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build
+      - run: swift run write-smoke
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build
+      - run: swift test
