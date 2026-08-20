@@ -89,7 +89,7 @@ public struct AnthropicPlanner: CloudPlanner {
 
   // MARK: Prompt
 
-  static let systemPrompt = """
+  public static let systemPrompt = """
     You plan documents that another, much smaller model will write on a phone.
 
     You never see real names, figures, dates, or organisations. They are \
@@ -109,7 +109,7 @@ public struct AnthropicPlanner: CloudPlanner {
     exceeding it.
     """
 
-  static func userPrompt(_ request: PlanRequest) -> String {
+  public static func userPrompt(_ request: PlanRequest) -> String {
     let catalog = request.catalog
       .map { "  \($0.id) (\($0.kind.rawValue)) — \($0.label)" }
       .joined(separator: "\n")
@@ -130,7 +130,7 @@ public struct AnthropicPlanner: CloudPlanner {
     return prompt
   }
 
-  static var planSchema: [String: Any] {[
+  public static var planSchema: [String: Any] {[
     "type": "object",
     "properties": [
       "title": ["type": "string"],
