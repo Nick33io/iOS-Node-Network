@@ -6,3 +6,6 @@ xcuserdata/
 .DS_Store
 .env
 .env.local
+
+# XcodeGen output — regenerate with `cd App && xcodegen generate`
+App/NodeNetwork.xcodeproj/

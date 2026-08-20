@@ -1,0 +1,42 @@
+name: NodeNetwork
+options:
+  bundleIdPrefix: io.thirtythree
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  WriteKit:
+    path: ..
+
+targets:
+  NodeNetwork:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: WriteKit
+        product: WriteCore
+      - package: WriteKit
+        product: WriteMesh
+      - package: WriteKit
+        product: WriteLAN
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodenetwork
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        # Cleartext to the Mac's model server on the LAN during development.
+        # A shipped build talks to the broker over HTTPS and drops this.
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: >-
+          Discovers nearby devices so they can share work in the node mesh.

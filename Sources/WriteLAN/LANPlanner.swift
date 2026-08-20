@@ -15,13 +15,23 @@ import WriteCloud
 /// nothing), so schema adherence is prompt-driven here and the response is
 /// mined for its first balanced JSON object. `Plan.validate` remains the
 /// semantic gate either way; this only has to get parseable JSON out.
-struct OllamaPlanner: CloudPlanner {
-  let model: String
-  let baseURL = URL(string: "http://127.0.0.1:11434")!
-  let attempts = 2
+public struct LANPlanner: CloudPlanner {
+  public let model: String
+  public let baseURL: URL
+  public let attempts: Int
 
-  func plan(_ request: PlanRequest) async throws -> Plan {
-    var lastError: Error = DevWriterError.ollama("no attempts made")
+  public init(
+    model: String,
+    baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
+    attempts: Int = 2
+  ) {
+    self.model = model
+    self.baseURL = baseURL
+    self.attempts = attempts
+  }
+
+  public func plan(_ request: PlanRequest) async throws -> Plan {
+    var lastError: Error = LANError.ollama("no attempts made")
     for _ in 0..<attempts {
       do {
         return try await planOnce(request)
@@ -59,21 +69,21 @@ struct OllamaPlanner: CloudPlanner {
 
     let (data, response) = try await URLSession.shared.data(for: http)
     guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-      throw DevWriterError.ollama(String(data: data, encoding: .utf8) ?? "no body")
+      throw LANError.ollama(String(data: data, encoding: .utf8) ?? "no body")
     }
     let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any]
     guard let text = envelope?["response"] as? String else {
-      throw DevWriterError.ollama("no response field")
+      throw LANError.ollama("no response field")
     }
     guard let json = Self.firstJSONObject(in: text) else {
-      throw DevWriterError.ollama("no JSON object in planner output: \(text.prefix(120))…")
+      throw LANError.ollama("no JSON object in planner output: \(text.prefix(120))…")
     }
     return try JSONDecoder().decode(Plan.self, from: Data(json.utf8))
   }
 
   /// First balanced `{…}` in the text, brace-scanned with string awareness so
   /// braces inside JSON strings do not end the object early.
-  static func firstJSONObject(in text: String) -> String? {
+  public static func firstJSONObject(in text: String) -> String? {
     guard let start = text.firstIndex(of: "{") else { return nil }
     var depth = 0
     var inString = false

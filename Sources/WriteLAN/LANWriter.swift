@@ -5,21 +5,31 @@ import Foundation
 #endif
 import WriteCore
 
-/// Development stand-in for the on-device writer.
+/// A `DeviceWriter` backed by an OpenAI-style local server over the LAN.
 ///
 /// Talks to a local Ollama daemon but holds itself to the same contract the
 /// MLX writer will have: identical limits, prompt-length rejection at the
 /// boundary, capped output tokens, and no conversation state between calls
 /// (each request is a fresh, stateless generate — the moral equivalent of the
 /// cleared KV cache).
-struct OllamaWriter: DeviceWriter {
-  let limits = DeviceLimits.qwen3_4B_4bit
-  let model: String
-  let baseURL = URL(string: "http://127.0.0.1:11434")!
+public struct LANWriter: DeviceWriter {
+  public let limits: DeviceLimits
+  public let model: String
+  public let baseURL: URL
 
-  func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
+  public init(
+    model: String,
+    baseURL: URL = URL(string: "http://127.0.0.1:11434")!,
+    limits: DeviceLimits = .qwen3_4B_4bit
+  ) {
+    self.model = model
+    self.baseURL = baseURL
+    self.limits = limits
+  }
+
+  public func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
     guard prompt.count <= limits.maxInputCharacters else {
-      throw DevWriterError.promptOverLimit(prompt.count)
+      throw LANError.promptOverLimit(prompt.count)
     }
     let tokens = min(max(1, maxOutputTokens), limits.maxOutputTokens)
 
@@ -40,21 +50,21 @@ struct OllamaWriter: DeviceWriter {
 
     let (data, response) = try await URLSession.shared.data(for: request)
     guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-      throw DevWriterError.ollama(String(data: data, encoding: .utf8) ?? "no body")
+      throw LANError.ollama(String(data: data, encoding: .utf8) ?? "no body")
     }
     let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any]
     guard let text = envelope?["response"] as? String else {
-      throw DevWriterError.ollama("no response field")
+      throw LANError.ollama("no response field")
     }
     return text
   }
 }
 
-enum DevWriterError: Error, CustomStringConvertible {
+public enum LANError: Error, CustomStringConvertible {
   case promptOverLimit(Int)
   case ollama(String)
 
-  var description: String {
+  public var description: String {
     switch self {
     case .promptOverLimit(let count):
       return "Prompt of \(count) characters exceeds the device limit."

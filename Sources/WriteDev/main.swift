@@ -1,6 +1,7 @@
 import Foundation
 import WriteCore
 import WriteCloud
+import WriteLAN
 
 // Live end-to-end: real Anthropic planner, local Ollama as the device.
 // Requires ANTHROPIC_API_KEY in the environment and an Ollama daemon.
@@ -12,7 +13,7 @@ let plannerModel = ProcessInfo.processInfo.environment["WRITE_DEV_PLANNER"] ?? "
 // a strong local model so the loop stays runnable without API credits.
 let apiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
 let planner: any CloudPlanner = apiKey.isEmpty
-  ? OllamaPlanner(model: plannerModel)
+  ? LANPlanner(model: plannerModel)
   : AnthropicPlanner(apiKey: apiKey)
 let plannerName = apiKey.isEmpty ? "\(plannerModel) (local fallback)" : "claude-opus-5"
 
@@ -39,7 +40,7 @@ let brief = """
 
 let pipeline = WritePipeline(
   planner: planner,
-  writer: OllamaWriter(model: deviceModel),
+  writer: LANWriter(model: deviceModel),
   facts: facts,
   maxAttempts: 2
 )
