@@ -1,4 +1,8 @@
 import Foundation
+#if canImport(FoundationNetworking)
+  // On Linux, URLSession lives in FoundationNetworking, not Foundation.
+  import FoundationNetworking
+#endif
 import WriteCore
 import WriteCloud
 
