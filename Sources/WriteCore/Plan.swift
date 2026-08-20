@@ -50,6 +50,38 @@ public struct Plan: Codable, Sendable, Equatable {
     [title, audience, tone] + sections.flatMap(\.textualFields)
   }
 
+  /// Canonical form of a decoded plan.
+  ///
+  /// Models routinely write `mustInclude: ["[[NAME_1]]"]` — the placeholder
+  /// spelling instead of the bare id. The meaning is unambiguous, so it is
+  /// normalised here rather than rejected; every other deviation still fails
+  /// validation. Runs before `validate`, never after.
+  public func normalized() -> Plan {
+    Plan(
+      title: title,
+      audience: audience,
+      tone: tone,
+      sections: sections.map { section in
+        SectionSpec(
+          id: section.id,
+          heading: section.heading,
+          intent: section.intent,
+          points: section.points,
+          mustInclude: section.mustInclude.map(Plan.bareID),
+          targetWords: section.targetWords
+        )
+      }
+    )
+  }
+
+  static func bareID(_ raw: String) -> String {
+    let trimmed = raw.trimmed
+    guard trimmed.hasPrefix("[["), trimmed.hasSuffix("]]"), trimmed.count > 4 else {
+      return trimmed
+    }
+    return String(trimmed.dropFirst(2).dropLast(2))
+  }
+
   /// Reject a plan the device cannot execute, or that refers to slots we never
   /// issued.
   ///

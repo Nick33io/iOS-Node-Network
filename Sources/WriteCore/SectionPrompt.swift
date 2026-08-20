@@ -32,7 +32,15 @@ public struct SectionPromptBuilder: Sendable {
   /// - Parameters:
   ///   - section: a spec whose placeholders have already been rehydrated.
   ///   - previousTail: closing text of the previous section, already rehydrated.
-  public func prompt(for section: SectionSpec, previousTail: String?) throws -> String {
+  ///   - required: real values that must appear verbatim in the section.
+  ///     Passed explicitly because the writer cannot be trusted to infer them
+  ///     from intent — the first live run showed a required name never
+  ///     surfacing when it was only implied.
+  public func prompt(
+    for section: SectionSpec,
+    previousTail: String?,
+    required: [String] = []
+  ) throws -> String {
     let head = Self.systemInstructions
 
     var body = """
@@ -45,6 +53,11 @@ public struct SectionPromptBuilder: Sendable {
     if !section.points.isEmpty {
       let points = section.points.map { "- \($0)" }.joined(separator: "\n")
       body += "\n\nCOVER:\n\(points)"
+    }
+
+    if !required.isEmpty {
+      let values = required.map { "- \($0)" }.joined(separator: "\n")
+      body += "\n\nMUST APPEAR VERBATIM:\n\(values)"
     }
 
     let fixed = head + body

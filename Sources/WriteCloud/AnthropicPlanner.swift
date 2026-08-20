@@ -123,6 +123,8 @@ public struct AnthropicPlanner: CloudPlanner {
 
       CONSTRAINTS:
       - No section may exceed \(request.wordBudgetPerSection) words.
+      - mustInclude entries are bare ids from the catalogue (NAME_1), never \
+      the bracketed placeholder form.
       """
     if let total = request.targetWords {
       prompt += "\n- The finished document should total roughly \(total) words."

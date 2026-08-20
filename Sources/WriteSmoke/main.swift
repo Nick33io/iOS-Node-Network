@@ -66,6 +66,9 @@ func plan(_ sections: [SectionSpec]) -> Plan {
 func spec(id: String = "s1", intent: String = "Report.", must: [String] = [], words: Int = 80) -> SectionSpec {
   SectionSpec(id: id, heading: "Status", intent: intent, points: [], mustInclude: must, targetWords: words)
 }
+check("bracketed mustInclude normalises to the bare id",
+      plan([spec(must: ["[[NAME_1]]"], words: 80)]).normalized()
+        .sections[0].mustInclude == ["NAME_1"])
 check("well-formed plan validates",
       (try? plan([spec(intent: "Report on [[NAME_1]].", must: ["NAME_1"])])
         .validate(against: facts, limits: limits)) != nil)
@@ -161,6 +164,9 @@ check("brief reached planner redacted",
       !sent.brief.contains("Dana Reyes") && sent.brief.contains("[[NAME_1]]"))
 check("second section carried continuity",
       writer.prompts[1].contains("Dana Reyes held steady."))
+check("required values are in the prompt from attempt one",
+      writer.prompts[0].contains("MUST APPEAR VERBATIM") &&
+      writer.prompts[0].contains("Dana Reyes"))
 
 let retryWriter = ScriptedWriter(["The producer held steady.", "Dana Reyes held steady.",
                                   "It stands at $1,250,000."])

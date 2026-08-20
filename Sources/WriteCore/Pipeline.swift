@@ -68,7 +68,7 @@ public struct WritePipeline: Sendable {
         wordBudgetPerSection: limits.wordBudgetPerSection,
         targetWords: targetWords
       )
-    )
+    ).normalized()
     try plan.validate(against: facts, limits: limits)
 
     let builder = SectionPromptBuilder(limits: limits)
@@ -79,9 +79,11 @@ public struct WritePipeline: Sendable {
 
     for spec in plan.sections {
       let local = rehydrate(spec, with: abstractor)
+      let required = spec.mustInclude.compactMap { facts[$0]?.value }
       let section = try await write(
         local,
         previousTail: tail,
+        required: required,
         builder: builder,
         verifier: verifier
       )
@@ -98,10 +100,11 @@ public struct WritePipeline: Sendable {
   private func write(
     _ spec: SectionSpec,
     previousTail: String?,
+    required: [String],
     builder: SectionPromptBuilder,
     verifier: Verifier
   ) async throws -> WrittenSection {
-    let base = try builder.prompt(for: spec, previousTail: previousTail)
+    let base = try builder.prompt(for: spec, previousTail: previousTail, required: required)
     var best: (text: String, issues: [Issue])?
 
     for attempt in 1...max(1, maxAttempts) {
