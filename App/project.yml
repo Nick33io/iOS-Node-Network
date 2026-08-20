@@ -47,6 +47,8 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        DEVELOPMENT_TEAM: VG8M5G3FF6
+        CODE_SIGN_STYLE: Automatic
         PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodenetwork
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
