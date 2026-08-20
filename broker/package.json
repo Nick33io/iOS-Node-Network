@@ -1,0 +1,15 @@
+{
+  "name": "33write-broker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Token broker fronting the Anthropic Messages API so shipped devices never hold the API key. Zero runtime dependencies.",
+  "type": "module",
+  "main": "test/broker.test.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test ."
+  }
+}
