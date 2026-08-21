@@ -173,31 +173,91 @@ struct ManagerView: View {
   private var addSheet: some View {
     NavigationStack {
       Form {
-        Section("node") {
-          TextField("label", text: $newLabel)
-          TextField("tailnet address", text: $newHost)
+        // Tapping a name is the fast path. The catalogue is the tailnet, so
+        // the common case needs no typing at all.
+        Section("on this tailnet") {
+          ForEach(unlistedKnownNodes) { entry in
+            Button {
+              fleet.add(label: entry.label, host: entry.host)
+              showingAdd = false
+              Task { await fleet.refreshAll() }
+            } label: {
+              HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(entry.label)
+                    .font(.system(.body, design: .monospaced))
+                  Text("\(entry.host) · \(entry.platform)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "plus.circle")
+                  .foregroundStyle(.green)
+              }
+            }
+            .buttonStyle(.plain)
+          }
+          if unlistedKnownNodes.isEmpty {
+            Text("every known node is already listed")
+              .font(.system(.caption, design: .monospaced))
+              .foregroundStyle(.tertiary)
+          }
+        }
+
+        // The catalogue is a convenience, not a source of truth: a device
+        // re-added to the tailnet gets a new address, and not every node will
+        // ever be on this list.
+        Section("by label or address") {
+          TextField("e.g. fold, 17 pro, or 100.x.x.x", text: $newHost)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .font(.system(.body, design: .monospaced))
+          if let match = KnownNodes.resolve(newHost) {
+            HStack {
+              Text("→ \(match.label)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.green)
+              Spacer()
+              Text(match.host)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+            }
+          } else if !newHost.isEmpty {
+            Text("no match — enter a full address")
+              .font(.system(.caption, design: .monospaced))
+              .foregroundStyle(.orange)
+          }
         }
       }
       .navigationTitle("Add node")
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Add") {
-            fleet.add(label: newLabel, host: newHost)
+            if let match = KnownNodes.resolve(newHost) {
+              fleet.add(label: match.label, host: match.host)
+            }
             newLabel = ""
             newHost = ""
             showingAdd = false
             Task { await fleet.refreshAll() }
           }
-          .disabled(newHost.isEmpty)
+          .disabled(KnownNodes.resolve(newHost) == nil)
         }
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { showingAdd = false }
+          Button("Cancel") {
+            newHost = ""
+            showingAdd = false
+          }
         }
       }
     }
     .preferredColorScheme(.dark)
+  }
+
+  /// Catalogue entries not already in the roster. Offering a node that is
+  /// already listed just invites a duplicate.
+  private var unlistedKnownNodes: [KnownNodes.Entry] {
+    KnownNodes.all.filter { entry in !fleet.nodes.contains { $0.host == entry.host } }
   }
 }
 

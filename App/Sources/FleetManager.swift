@@ -61,12 +61,13 @@ final class FleetManager {
 
   /// Seeded with the tailnet addresses this fleet already uses. Editable,
   /// because addresses outlive any hardcoded list.
-  static let defaultRoster: [(String, String)] = [
-    ("M5 Max", "100.73.112.15"),
-    ("Mini M4 Pro", "100.101.220.18"),
-    ("iPhone 15 Pro Max", "100.126.56.73"),
-    ("iPhone 17 Pro Max", "100.65.9.108"),
-  ]
+  /// Seeded from the tailnet catalogue, so a fresh install already knows the
+  /// fleet and nothing has to be typed to get started.
+  static var defaultRoster: [(String, String)] {
+    KnownNodes.all
+      .filter { $0.platform != "Android" || $0.label.contains("Fold") }
+      .map { ($0.label, $0.host) }
+  }
 
   private static func loadRoster() -> [FleetNode] {
     if let stored = UserDefaults.standard.array(forKey: rosterKey) as? [[String: String]],
