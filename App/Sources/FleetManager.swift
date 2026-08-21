@@ -91,6 +91,18 @@ final class FleetManager {
     saveRoster()
   }
 
+  /// Puts back any default node that has been removed.
+  ///
+  /// Removal is easy and permanent; without this, dropping a node means
+  /// retyping a tailnet address from memory to get it back.
+  func restoreDefaults() {
+    for (label, host) in Self.defaultRoster where !nodes.contains(where: { $0.host == host }) {
+      nodes.append(FleetNode(id: host, label: label, host: host))
+    }
+    nodes.sort { $0.label < $1.label }
+    saveRoster()
+  }
+
   func remove(_ node: FleetNode) {
     nodes.removeAll { $0.id == node.id }
     saveRoster()

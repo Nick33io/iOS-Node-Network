@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import NodeKit
 
 /// The iPad's fleet console.
@@ -10,6 +11,10 @@ struct ManagerView: View {
   /// Ambient resting state, same idiom as a worker node: the fleet is up and
   /// has nothing to ask of anyone. Tap to bring the console back.
   @State private var showingRain = false
+  @State private var ambient = AmbientDisplay()
+  #if canImport(AVFoundation) && !targetEnvironment(simulator)
+    @State private var camera = CameraGlyphSource()
+  #endif
 
   private let columns = [GridItem(.adaptive(minimum: 320), spacing: 16)]
 
@@ -56,6 +61,19 @@ struct ManagerView: View {
       .toolbar {
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button {
+            Task { await toggleCamera() }
+          } label: {
+            Image(systemName: cameraRunning ? "video.fill" : "video")
+          }
+          .accessibilityLabel(cameraRunning ? "Stop camera" : "Start ambient camera")
+          Button {
+            fleet.restoreDefaults()
+            Task { await fleet.refreshAll() }
+          } label: {
+            Image(systemName: "arrow.counterclockwise.circle")
+          }
+          .accessibilityLabel("Restore default nodes")
+          Button {
             withAnimation(.easeInOut(duration: 0.25)) { showingRain = true }
           } label: {
             Image(systemName: "square.grid.3x3.fill")
@@ -89,6 +107,41 @@ struct ManagerView: View {
     .preferredColorScheme(.dark)
   }
 
+  /// This device's own camera when it is the source, the followed node's
+  /// otherwise.
+  private var currentFrame: GlyphFrame {
+    #if canImport(AVFoundation) && !targetEnvironment(simulator)
+      if camera.isRunning { return camera.frame }
+    #endif
+    return ambient.frame
+  }
+
+  private var cameraRunning: Bool {
+    #if canImport(AVFoundation) && !targetEnvironment(simulator)
+      return camera.isRunning
+    #else
+      return false
+    #endif
+  }
+
+  @MainActor
+  private func toggleCamera() async {
+    #if canImport(AVFoundation) && !targetEnvironment(simulator)
+      if camera.isRunning {
+        camera.stop()
+        UIApplication.shared.isIdleTimerDisabled = false
+        withAnimation(.easeInOut(duration: 0.25)) { showingRain = false }
+      } else {
+        await camera.start()
+        if camera.isRunning {
+          // An ambient display that lets the screen lock stops being one.
+          UIApplication.shared.isIdleTimerDisabled = true
+          withAnimation(.easeInOut(duration: 0.25)) { showingRain = true }
+        }
+      }
+    #endif
+  }
+
   private var summary: some View {
     HStack(spacing: 28) {
       Stat(
@@ -104,6 +157,13 @@ struct ManagerView: View {
       )
       if let swept = fleet.lastSweep {
         Stat(key: "last sweep", value: swept.formatted(date: .omitted, time: .standard))
+      }
+      if currentFrame.columns > 0 {
+        Stat(
+          key: "ambient",
+          value: cameraRunning ? "source" : "viewing",
+          tint: .green
+        )
       }
       Spacer()
       if fleet.isRefreshing { ProgressView().tint(.green) }
