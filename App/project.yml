@@ -39,6 +39,11 @@ targets:
         product: WriteMesh
       - package: WriteKit
         product: WriteLAN
+      # The listener, the request boundary, the fleet profile, the device
+      # profile. Shared with the macOS NodeAgent so both nodes answer one
+      # contract from one implementation.
+      - package: WriteKit
+        product: NodeKit
       - package: mlx-swift-lm
         product: MLXLLM
       - package: mlx-swift-lm

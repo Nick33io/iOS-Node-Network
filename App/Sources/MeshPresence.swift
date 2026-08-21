@@ -1,4 +1,5 @@
 import Foundation
+import NodeKit
 import Observation
 import WriteMesh
 
@@ -23,14 +24,10 @@ final class MeshPresence {
   #endif
 
   init() {
-    let key = "node.identity"
-    if let existing = UserDefaults.standard.string(forKey: key) {
-      localNode = NodeID(existing)
-    } else {
-      let generated = "node-" + UUID().uuidString.prefix(8).lowercased()
-      UserDefaults.standard.set(generated, forKey: key)
-      localNode = NodeID(generated)
-    }
+    // Minted and stored by NodeKit so the peer transport and the fleet profile
+    // name this node identically. A controller that meets it over Multipeer and
+    // a controller that probes it over HTTP must be talking about one node.
+    localNode = NodeID(BridgeProfileEmitter.nodeIdentity)
   }
 
   var isAvailable: Bool {

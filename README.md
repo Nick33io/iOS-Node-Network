@@ -38,9 +38,38 @@ brief ──redact──▶ gate ──▶ cloud planner ──▶ plan (placeho
 | `WriteCore` | Abstraction, planning types, prompt budgeting, verification, orchestration | no | yes |
 | `WriteCloud` | Anthropic Messages API planner | **yes** | **no** |
 | `WriteSmoke` | Check harness that runs without Xcode | no | test data only |
+| `NodeKit` | Being a node: listener, request boundary, fleet profile, device profile | **yes** | yes |
+| `NodeAgent` | A Mac as a node. macOS executable | **yes** | yes |
 
-`WriteCloud` is the only target that opens a socket, and it has no way to reach
-a `FactMap`. That separation is the whole design.
+`WriteCloud` is the only target that reaches *out* to a socket, and it has no
+way to reach a `FactMap`. That separation is the whole design. `NodeKit` listens
+rather than dials, and never leaves the tailnet.
+
+`NodeKit` and `NodeAgent` are Apple-only — the sources are guarded, so both
+compile to nothing on Linux and the portable core keeps one manifest.
+
+## Nodes
+
+Every node — phone, iPad, Mac — answers the same two routes on port 8833 and
+publishes the same `33-shell-bridge-fleet/v1` profile:
+
+```
+GET  /health    -> identity, memory, thermal, model, backend, enforced limits
+POST /generate  -> {prompt, maxOutputTokens?} -> text plus timings
+```
+
+A Mac used to be modelled as an Ollama endpoint the phones dialled: outside the
+fleet, exempt from the device boundary, invisible to scheduling. It now runs the
+same listener behind the same `DeviceLimits`, and Ollama becomes an
+implementation detail of one node rather than a second kind of fleet member.
+
+```bash
+swift run NodeAgent --backend lan --model llama-33fast:latest
+```
+
+The limits are the load-bearing part. Ollama will accept a prompt twice the size
+a phone refuses; `/generate` rejects it with `413` **before** a writer is built,
+so a section that succeeds on a Mac is one that could have succeeded on a phone.
 
 ## The egress boundary
 

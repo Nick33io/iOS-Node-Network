@@ -1,3 +1,4 @@
+import NodeKit
 import SwiftUI
 import UIKit
 import WriteCore
@@ -94,6 +95,7 @@ struct RootView: View {
   private func ensureServer() -> NodeServer {
     if let server { return server }
     let created = NodeServer(
+      limits: MLXPolicy.limits,
       makeWriter: { try await model.writerForServing() },
       describe: {
         BridgeProfileEmitter.payload(
