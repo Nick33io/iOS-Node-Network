@@ -4,8 +4,15 @@ import SwiftUI
 struct NodeNetworkApp: App {
   var body: some Scene {
     WindowGroup {
-      RootView()
-        .preferredColorScheme(.dark)
+      // One app, two jobs: the iPad manages the fleet, everything else is a
+      // worker node. See NodeRole.
+      switch NodeRole.current {
+      case .manager:
+        ManagerView()
+      case .node:
+        RootView()
+          .preferredColorScheme(.dark)
+      }
     }
   }
 }
