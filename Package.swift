@@ -9,8 +9,10 @@ let package = Package(
     .library(name: "WriteCloud", targets: ["WriteCloud"]),
     .library(name: "WriteLAN", targets: ["WriteLAN"]),
     .library(name: "WriteMesh", targets: ["WriteMesh"]),
+    .library(name: "NodeKit", targets: ["NodeKit"]),
     .executable(name: "write-smoke", targets: ["WriteSmoke"]),
     .executable(name: "write-dev", targets: ["WriteDev"]),
+    .executable(name: "NodeAgent", targets: ["NodeAgent"]),
   ],
   targets: [
     // Pure Swift. No network, no MLX, no Foundation-heavy deps.
@@ -32,7 +34,22 @@ let package = Package(
     // MultipeerConnectivity adapter is Apple-only and lives outside this
     // portable core.
     .target(name: "WriteMesh", dependencies: ["WriteCore"]),
+    // Everything it takes to *be* a node: the listener, the request boundary,
+    // the bridge-fleet profile, the device profile, the benchmark. Shared so a
+    // Mac and a phone answer the same contract from the same code rather than
+    // from two implementations that drift. Apple-only — the sources are guarded
+    // on `canImport(Darwin)`, so this compiles to an empty module on Linux and
+    // the portable targets stay portable.
+    .target(name: "NodeKit", dependencies: ["WriteCore"]),
+    // A Mac as a first-class node rather than a special-cased Ollama endpoint:
+    // same port, same routes, same limits enforced at the same boundary.
+    .executableTarget(
+      name: "NodeAgent",
+      dependencies: ["NodeKit", "WriteCore", "WriteLAN"],
+      path: "MacNode"
+    ),
     .testTarget(name: "WriteCoreTests", dependencies: ["WriteCore"]),
     .testTarget(name: "WriteMeshTests", dependencies: ["WriteMesh", "WriteCore"]),
+    .testTarget(name: "NodeKitTests", dependencies: ["NodeKit", "WriteCore"]),
   ]
 )
