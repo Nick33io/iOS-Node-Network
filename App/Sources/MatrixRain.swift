@@ -23,6 +23,22 @@ struct MatrixRain: View {
   /// miniature reads as the same field rather than a cropped corner of it.
   var scale: CGFloat = 1
 
+  /// Fills a large display without simply showing more, smaller columns.
+  ///
+  /// A 13" iPad at scale 1 renders roughly three times the columns of a phone,
+  /// which reads as noise rather than rain — the eye loses individual trails.
+  /// Scaling the glyphs up with the display keeps the column count and the
+  /// sense of falling intact, so the field reads the same at arm's length on a
+  /// tablet as it does in the hand.
+  static func fitting(_ size: CGSize) -> CGFloat {
+    let shorter = min(size.width, size.height)
+    switch shorter {
+    case ..<500: return 1.0     // phone
+    case ..<800: return 1.5     // small tablet
+    default: return 1.9         // 13" and larger
+    }
+  }
+
   private var columnWidth: CGFloat { 20 * scale }
   private var rowHeight: CGFloat { 22 * scale }
   private var glyphSize: CGFloat { 18 * scale }

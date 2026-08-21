@@ -15,9 +15,12 @@ struct RootView: View {
   var body: some View {
     ZStack {
       if mesh.isJoined && !showingConsole {
-        MatrixRain()
-          .transition(.opacity)
-          .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showingConsole = true } }
+        GeometryReader { proxy in
+          MatrixRain(scale: MatrixRain.fitting(proxy.size))
+        }
+        .ignoresSafeArea()
+        .transition(.opacity)
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showingConsole = true } }
           .accessibilityAddTraits(.isButton)
           .accessibilityLabel("Joined to the node network. Double tap to open the console.")
       } else {

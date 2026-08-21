@@ -7,10 +7,32 @@ struct ManagerView: View {
   @State private var showingAdd = false
   @State private var newLabel = ""
   @State private var newHost = ""
+  /// Ambient resting state, same idiom as a worker node: the fleet is up and
+  /// has nothing to ask of anyone. Tap to bring the console back.
+  @State private var showingRain = false
 
   private let columns = [GridItem(.adaptive(minimum: 320), spacing: 16)]
 
   var body: some View {
+    ZStack {
+      if showingRain {
+        GeometryReader { proxy in
+          MatrixRain(scale: MatrixRain.fitting(proxy.size))
+            .onTapGesture {
+              withAnimation(.easeInOut(duration: 0.25)) { showingRain = false }
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Fleet display. Double tap to open the console.")
+        }
+        .ignoresSafeArea()
+        .transition(.opacity)
+      } else {
+        console.transition(.opacity)
+      }
+    }
+  }
+
+  private var console: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
@@ -33,6 +55,12 @@ struct ManagerView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItemGroup(placement: .topBarTrailing) {
+          Button {
+            withAnimation(.easeInOut(duration: 0.25)) { showingRain = true }
+          } label: {
+            Image(systemName: "square.grid.3x3.fill")
+          }
+          .accessibilityLabel("Fleet display")
           Button {
             showingAdd = true
           } label: {
@@ -180,6 +208,10 @@ private struct NodeCard: View {
       .padding(.top, 4)
     }
     .padding(16)
+    // An offline node reports almost nothing, so its card would be a third the
+    // height of a healthy one and the grid would read as broken rather than as
+    // a fleet with something wrong in it. A floor keeps the rows even.
+    .frame(minHeight: 250, alignment: .top)
     .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
   }
 

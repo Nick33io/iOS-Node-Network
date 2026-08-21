@@ -14,27 +14,9 @@ import Foundation
   /// changing an id, a revision, or a digest changes which model the product
   /// runs, so treat it as a reviewed change.
   struct PinnedModelDownloader: Downloader {
-    /// One file of the pinned revision.
-    struct Entry: Sendable {
-      let path: String
-      let size: Int64
-      let digest: FileDigest
-    }
-
-    /// How the repository stores a file, which decides what its recorded digest
-    /// is taken over.
-    enum FileDigest: Sendable {
-      /// Git object SHA-1: `sha1("blob <size>\0" + contents)`. Plain git blobs.
-      case gitBlob(String)
-      /// Content SHA-256, as recorded in the pointer for git-lfs files.
-      case sha256(String)
-
-      var value: String {
-        switch self {
-        case .gitBlob(let value), .sha256(let value): return value
-        }
-      }
-    }
+    /// The manifest types live outside this guard; see PinnedModel.swift.
+    typealias Entry = ModelFile
+    typealias FileDigest = ModelFile.Digest
 
     /// The revision, enumerated. A glob describes names; this describes
     /// content, which is the only thing worth checking.

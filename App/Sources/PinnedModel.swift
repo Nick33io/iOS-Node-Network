@@ -1,5 +1,31 @@
 import Foundation
 
+/// One file of a pinned revision.
+///
+/// Deliberately outside the MLX availability guard. A manifest is data, and the
+/// simulator — which has no Metal GPU and therefore no MLX — still has to
+/// compile the app that carries it.
+struct ModelFile: Sendable {
+  /// How the repository stores a file, which decides what its recorded digest
+  /// is taken over.
+  enum Digest: Sendable {
+    /// Git object SHA-1: `sha1("blob <size>\0" + contents)`. Plain git blobs.
+    case gitBlob(String)
+    /// Content SHA-256, as recorded in the pointer for git-lfs files.
+    case sha256(String)
+
+    var value: String {
+      switch self {
+      case .gitBlob(let value), .sha256(let value): return value
+      }
+    }
+  }
+
+  let path: String
+  let size: Int64
+  let digest: Digest
+}
+
 /// A model pinned to an immutable revision with a verified file manifest.
 ///
 /// Grouping the id, revision, and manifest into one value is what makes
@@ -9,7 +35,7 @@ import Foundation
 struct PinnedModel: Sendable {
   let id: String
   let revision: String
-  let files: [PinnedModelDownloader.Entry]
+  let files: [ModelFile]
 
   var totalBytes: Int64 { files.reduce(0) { $0 + $1.size } }
 
