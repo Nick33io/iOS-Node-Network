@@ -31,6 +31,7 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: Assets.xcassets
     dependencies:
       - package: WriteKit
         product: WriteCore
@@ -44,9 +45,13 @@ targets:
         product: MLXLMCommon
       - package: swift-transformers
         product: Transformers
+    entitlements:
+      path: NodeNetwork.entitlements
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: NOD3
         DEVELOPMENT_TEAM: VG8M5G3FF6
         CODE_SIGN_STYLE: Automatic
         PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodenetwork
@@ -59,8 +64,27 @@ targets:
           UIInterfaceOrientationPortrait
           UIInterfaceOrientationLandscapeLeft
           UIInterfaceOrientationLandscapeRight
-        # Cleartext to the Mac's model server on the LAN during development.
-        # A shipped build talks to the broker over HTTPS and drops this.
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: >-
+    # MultipeerConnectivity refuses to advertise or browse unless the service
+    # type is declared here as well. Both transports must be listed.
+    info:
+      path: Info.plist
+      properties:
+        NSBonjourServices:
+          - _node33-mesh._tcp
+          - _node33-mesh._udp
+        NSLocalNetworkUsageDescription: >-
           Discovers nearby devices so they can share work in the node mesh.
+        # Cleartext to the Mac's model server during development.
+        #
+        # NSAllowsLocalNetworking is not enough: it covers link-local, .local,
+        # and RFC1918 ranges, but Tailscale hands out 100.64.0.0/10 (CGNAT),
+        # which ATS does not treat as local. The tailnet address therefore
+        # needs its own exception.
+        #
+        # A shipped build talks to the broker over HTTPS and drops all of this.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            100.73.112.15:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false

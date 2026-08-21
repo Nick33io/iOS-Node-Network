@@ -26,7 +26,10 @@ final class RunModel {
   var title: String = ""
   /// Host running the model server. The simulator cannot run MLX, so during
   /// development both roles are served over the LAN from the Mac.
-  var host: String = "127.0.0.1"
+  /// Host running the planner. Tailscale gives every device a stable address
+  /// that survives moving between networks, which a LAN IP does not — the
+  /// mesh keeps working off the home Wi-Fi.
+  var host: String = "100.73.112.15"
   var plannerModel: String = "33qwen:latest"
   var writerModel: String = "33qwen-local:latest"
 
@@ -35,6 +38,10 @@ final class RunModel {
   /// ~2.3 GB; a silent first run looks like a hang.
   var loadProgress: Double = 0
 
+  /// Measured speed of this device, once benchmarked.
+  var benchmark: BenchmarkResult?
+  var benchmarkError: String?
+
   private(set) var facts: FactMap?
   #if canImport(MLX) && !targetEnvironment(simulator)
     private let deviceWriter = MLXWriter()
@@ -42,6 +49,15 @@ final class RunModel {
 
   var isRunning: Bool {
     phase == .loading || phase == .planning || phase == .writing
+  }
+
+  /// Writer for serving remote requests. Same instance the UI uses, so a
+  /// dispatched task and a local run cannot end up on different models.
+  func writerForServing() async throws -> any DeviceWriter {
+    guard let base = URL(string: "http://\(host):11434") else {
+      throw MLXWriterError.unavailable("invalid host")
+    }
+    return try await makeWriter(base: base)
   }
 
   /// The writer for this run, honouring the selected backend.
@@ -59,6 +75,30 @@ final class RunModel {
       #else
         return MLXWriterUnavailable(reason: WriterBackend.unavailableReason)
       #endif
+    }
+  }
+
+  /// Measures this device alone. Separate from `run` because a document run
+  /// mixes planner latency, network, and retries into the number — useless for
+  /// comparing hardware.
+  func runBenchmark() async {
+    guard !isRunning else { return }
+    benchmarkError = nil
+    benchmark = nil
+    guard let base = URL(string: "http://\(host):11434") else { return }
+    do {
+      let writer = try await makeWriter(base: base)
+      phase = .writing
+      benchmark = try await Benchmark.run(
+        writer: writer,
+        device: DeviceProfile.current().identifier,
+        model: backend == .onDevice ? MLXPolicy.allowedModel : writerModel,
+        backend: backend.label
+      )
+      phase = .idle
+    } catch {
+      benchmarkError = String(describing: error)
+      phase = .idle
     }
   }
 

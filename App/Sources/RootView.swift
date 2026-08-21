@@ -1,15 +1,41 @@
 import SwiftUI
+import UIKit
 import WriteCore
 
 struct RootView: View {
   @State private var model = RunModel()
   @State private var profile = DeviceProfile.current()
+  @State private var mesh = MeshPresence()
+  @State private var server: NodeServer?
+  /// Resting state while joined. Tapping the rain reveals the console; tapping
+  /// the thumbnail puts it back.
+  @State private var showingConsole = false
 
   var body: some View {
+    ZStack {
+      if mesh.isJoined && !showingConsole {
+        MatrixRain()
+          .transition(.opacity)
+          .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showingConsole = true } }
+          .accessibilityAddTraits(.isButton)
+          .accessibilityLabel("Joined to the node network. Double tap to open the console.")
+      } else {
+        console
+          .transition(.opacity)
+      }
+    }
+  }
+
+  private var console: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 28) {
+          if mesh.isJoined {
+            matrixThumbnail
+          }
           nodeSection
+          serverSection
+          meshSection
           egressSection
           runSection
           if !model.sections.isEmpty { outputSection }
@@ -17,7 +43,7 @@ struct RootView: View {
         .padding(20)
       }
       .background(Color.black)
-      .navigationTitle("NODE")
+      .navigationTitle("NOD3")
       .navigationBarTitleDisplayMode(.inline)
     }
     .tint(.white)
@@ -25,6 +51,119 @@ struct RootView: View {
       // Test hook: lets a harness exercise a full run without driving the UI.
       guard ProcessInfo.processInfo.arguments.contains("-autorun") else { return }
       await model.run()
+    }
+  }
+
+  // MARK: Node server
+
+  private var serverSection: some View {
+    Panel(heading: "LISTENER") {
+      Row(
+        key: "state",
+        value: server?.isListening == true ? "listening :8833" : "off",
+        tint: server?.isListening == true ? .green : .secondary
+      )
+      if let served = server?.served, served > 0 {
+        Row(key: "served", value: "\(served)")
+      }
+      if let failure = server?.lastError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(3)
+      }
+      HStack {
+        Text("reachable over tailnet while open")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+        Spacer()
+        Button(server?.isListening == true ? "STOP" : "LISTEN") {
+          if server?.isListening == true {
+            server?.stop()
+          } else {
+            ensureServer().start()
+          }
+        }
+        .font(.system(.caption, design: .monospaced).weight(.semibold))
+      }
+      .padding(.top, 6)
+    }
+  }
+
+  @discardableResult
+  private func ensureServer() -> NodeServer {
+    if let server { return server }
+    let created = NodeServer(
+      makeWriter: { try await model.writerForServing() },
+      describe: {
+        BridgeProfileEmitter.payload(
+          node: mesh.localNode.raw,
+          label: UIDevice.current.name,
+          backend: model.backend.label,
+          model: model.backend == .onDevice ? MLXPolicy.allowedModel : model.writerModel,
+          limits: MLXPolicy.limits
+        )
+      }
+    )
+    server = created
+    return created
+  }
+
+  // MARK: Mesh
+
+  /// Tapping this returns the device to the ambient rain.
+  private var matrixThumbnail: some View {
+    Button {
+      withAnimation(.easeInOut(duration: 0.25)) { showingConsole = false }
+    } label: {
+      HStack(spacing: 12) {
+        MatrixRain(scale: 0.4)
+          .frame(width: 54, height: 40)
+          .clipShape(RoundedRectangle(cornerRadius: 4))
+          .allowsHitTesting(false)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("JOINED")
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.green)
+          Text(mesh.peers.isEmpty ? "no peers yet" : "\(mesh.peers.count) peer(s)")
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.tertiary)
+        }
+        Spacer()
+      }
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Return to the node network display")
+  }
+
+  private var meshSection: some View {
+    Panel(heading: "MESH") {
+      Row(key: "identity", value: mesh.localNode.raw)
+      Row(
+        key: "peer-to-peer",
+        value: mesh.isJoined ? "joined" : "off",
+        tint: mesh.isJoined ? .green : .secondary
+      )
+      if mesh.isJoined {
+        Row(key: "peers", value: "\(mesh.peers.count)")
+      }
+
+      HStack {
+        Text(mesh.isJoined ? "leaving stops discovery" : "use when there is no Wi-Fi")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+        Spacer()
+        Button(mesh.isJoined ? "LEAVE" : "JOIN") {
+          if mesh.isJoined {
+            mesh.leave()
+          } else {
+            mesh.join()
+          }
+        }
+        .font(.system(.caption, design: .monospaced).weight(.semibold))
+        .disabled(!mesh.isAvailable)
+      }
+      .padding(.top, 6)
     }
   }
 
@@ -80,6 +219,11 @@ struct RootView: View {
           .font(.system(.caption, design: .monospaced))
           .foregroundStyle(statusTint)
         Spacer()
+        Button("BENCH") {
+          Task { await model.runBenchmark() }
+        }
+        .font(.system(.caption, design: .monospaced))
+        .disabled(model.isRunning)
         Button(model.isRunning ? "RUNNING" : "START") {
           Task { await model.run() }
         }
@@ -87,6 +231,19 @@ struct RootView: View {
         .disabled(model.isRunning)
       }
       .padding(.top, 6)
+
+      if let bench = model.benchmark {
+        Row(key: "speed", value: String(format: "%.1f tok/s", bench.tokensPerSecond), tint: .green)
+        Row(key: "elapsed", value: String(format: "%.1fs", bench.seconds))
+        Row(key: "output", value: "\(bench.outputCharacters) chars")
+      }
+      if let failure = model.benchmarkError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(4)
+          .padding(.top, 4)
+      }
     }
   }
 

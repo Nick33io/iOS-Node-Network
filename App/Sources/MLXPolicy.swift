@@ -10,16 +10,42 @@ import WriteCore
 /// allowed to ask for, so treat it as a reviewed policy change and not an
 /// optimisation.
 enum MLXPolicy {
-  static let allowedModel = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
-  /// Pinned to an immutable commit. The app does not follow `main`; moving to a
-  /// new revision is a reviewed code change, never an automatic "latest".
-  static let allowedModelRevision = "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b"
+  /// The model this build runs.
+  ///
+  /// Qwen3-1.7B at 4-bit is 0.98 GB against Qwen3-4B's 2.3 GB. That margin is
+  /// the difference between loading and being jetsammed on an 8 GB device, and
+  /// it holds even where the increased-memory-limit entitlement is missing —
+  /// so the app works on a device that has not been specially provisioned.
+  ///
+  /// Both entries are pinned to immutable commits. The app does not follow
+  /// `main`; changing a revision is a reviewed code change, never an
+  /// automatic "latest".
+  static let model = PinnedModel.qwen3_1_7B_4bit
+
+  static var allowedModel: String { model.id }
+  static var allowedModelRevision: String { model.revision }
 
   /// MLX allocator controls. These bound MLX's own arenas; they are not a
   /// claim that total process memory can never exceed them. Jetsam remains the
   /// real ceiling, and the increased-memory-limit entitlement raises it.
-  static let memoryLimitBytes = 8_053_063_680  // 7.5 GB
+  ///
+  /// The 33io plugin used a flat 7.5 GB. That is wrong on a phone: on an 8 GB
+  /// device jetsam kills the process long before MLX reaches 7.5 GB, so a
+  /// fixed ceiling means MLX never throttles itself and the OS decides
+  /// instead — which presents as an unexplained crash. Deriving the limit from
+  /// installed memory makes MLX back off first, where it can fail cleanly.
   static let cacheLimitBytes = 67_108_864  // 64 MiB
+
+  /// Roughly half of installed memory, capped at the audited 7.5 GB.
+  ///
+  /// Half is deliberately conservative: the entitlement raises the jetsam
+  /// ceiling to around 55-60% on an 8 GB device, and the app still needs room
+  /// for the tokenizer, KV cache, and the UI on top of the weights.
+  static var memoryLimitBytes: Int {
+    let installed = ProcessInfo.processInfo.physicalMemory
+    let half = Int(installed / 2)
+    return min(half, 8_053_063_680)
+  }
 
   static let limits = DeviceLimits.qwen3_4B_4bit
 

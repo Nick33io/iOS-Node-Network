@@ -38,40 +38,9 @@ import Foundation
 
     /// The revision, enumerated. A glob describes names; this describes
     /// content, which is the only thing worth checking.
-    static let manifest: [Entry] = [
-      Entry(
-        path: "added_tokens.json", size: 707,
-        digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
-      Entry(
-        path: "chat_template.jinja", size: 4040,
-        digest: .gitBlob("a18870ad4ba26ac6c43758fc506c1bb6ff206bb4")),
-      Entry(
-        path: "config.json", size: 938,
-        digest: .gitBlob("ce8b8eccd1cdf6d8a30767f58e8ff858dd15eab5")),
-      Entry(
-        path: "generation_config.json", size: 238,
-        digest: .gitBlob("432531a002c181a19de338313d2375e9d7494d7e")),
-      Entry(
-        path: "model.safetensors", size: 2_263_022_417,
-        digest: .sha256("2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f")),
-      Entry(
-        path: "model.safetensors.index.json", size: 63964,
-        digest: .gitBlob("4741a210f9920c2949ca73bbb2a7ce9583e7fd83")),
-      Entry(
-        path: "special_tokens_map.json", size: 613,
-        digest: .gitBlob("ac23c0aaa2434523c494330aeb79c58395378103")),
-      Entry(
-        path: "tokenizer.json", size: 11_422_654,
-        digest: .sha256("aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4")),
-      Entry(
-        path: "tokenizer_config.json", size: 5440,
-        digest: .gitBlob("474bbcd82077828bdec32b8dbc1826cdff2a792a")),
-      Entry(
-        path: "vocab.json", size: 2_776_833,
-        digest: .gitBlob("4783fe10ac3adce15ac8f358ef5462739852c569")),
-    ]
+    static var manifest: [Entry] { MLXPolicy.model.files }
 
-    static let totalBytes = manifest.reduce(Int64(0)) { $0 + $1.size }
+    static var totalBytes: Int64 { manifest.reduce(Int64(0)) { $0 + $1.size } }
 
     /// What MLX asks for today. Checked rather than obeyed: if a future MLX
     /// asks for a different set, the manifest may no longer be the right answer
