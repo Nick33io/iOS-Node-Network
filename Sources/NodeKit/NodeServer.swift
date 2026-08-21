@@ -32,6 +32,10 @@
     private var listener: NWListener?
     private let makeWriter: @MainActor () async throws -> any DeviceWriter
     private let describe: @MainActor () -> [String: Any]
+  /// Supplies the current ambient frame, when this node is capturing one.
+  /// Injected rather than imported so NodeKit stays free of AVFoundation and
+  /// keeps building on hosts with no camera at all.
+  private var glyphs: (@MainActor () -> Data?)?
     /// Held separately from the writer so a request can be refused before the
     /// writer is built. On a phone that build is a multi-second model load; the
     /// boundary must not cost that much to enforce.
@@ -45,6 +49,14 @@
       self.limits = limits
       self.makeWriter = makeWriter
       self.describe = describe
+    }
+
+    /// Registers a supplier for the ambient frame served on `/glyphs`.
+    ///
+    /// Injected rather than imported so NodeKit stays free of AVFoundation and
+    /// keeps building on hosts that have no camera at all.
+    public func provideGlyphs(_ provider: @escaping @MainActor () -> Data?) {
+      glyphs = provider
     }
 
     public func start() {
@@ -121,7 +133,16 @@
     private func respond(to request: HTTPRequest, on connection: NWConnection) async {
       served += 1
       switch (request.method, request.path) {
-      case ("GET", "/health"):
+      case ("GET", "/glyphs"):
+      // 204 rather than an empty object: a viewer polling a node that is not
+      // capturing should see "nothing here" without parsing a body.
+      guard let data = glyphs?() else {
+        sendRaw(status: "204 No Content", body: Data(), on: connection)
+        return
+      }
+      sendRaw(status: "200 OK", body: data, on: connection)
+
+    case ("GET", "/health"):
         send(json: describe(), status: "200 OK", on: connection)
 
       case ("POST", "/generate"):
@@ -171,7 +192,22 @@
       }
     }
 
-    private func send(json: [String: Any], status: String, on connection: NWConnection) {
+    private func sendRaw(status: String, body: Data, on connection: NWConnection) {
+    var response = Data(
+      """
+      HTTP/1.1 \(status)\r
+      Content-Type: application/json\r
+      Content-Length: \(body.count)\r
+      Connection: close\r
+      \r\n
+      """.utf8
+    )
+    response.append(body)
+    connection.send(
+      content: response, completion: .contentProcessed { _ in connection.cancel() })
+  }
+
+  private func send(json: [String: Any], status: String, on connection: NWConnection) {
       let body =
         (try? JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]))
         ?? Data("{}".utf8)

@@ -12,6 +12,7 @@ let package = Package(
     .library(name: "NodeKit", targets: ["NodeKit"]),
     .executable(name: "write-smoke", targets: ["WriteSmoke"]),
     .executable(name: "write-dev", targets: ["WriteDev"]),
+    .executable(name: "fleet-runner", targets: ["FleetRunner"]),
     .executable(name: "NodeAgent", targets: ["NodeAgent"]),
   ],
   targets: [
@@ -29,6 +30,13 @@ let package = Package(
     // Live end-to-end run on the Mac: real cloud planner, Ollama standing in
     // for the device writer under the same limits. Never ships.
     .executableTarget(name: "WriteDev", dependencies: ["WriteCore", "WriteCloud", "WriteLAN"]),
+    // Orchestrates one document across every reachable node. Plain HTTP over
+    // the tailnet, so it can move from the Mac to another host without any
+    // node changing — the point of having one contract.
+    .executableTarget(
+      name: "FleetRunner", dependencies: ["WriteCore", "WriteCloud", "WriteLAN"],
+      path: "FleetRunner"
+    ),
     // Portable multi-device coordination: task graph, versioned claim/lease
     // protocol, coordinator and worker actors. Transport is abstracted; the
     // MultipeerConnectivity adapter is Apple-only and lives outside this

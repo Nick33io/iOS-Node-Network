@@ -79,6 +79,9 @@ targets:
           - _node33-mesh._udp
         NSLocalNetworkUsageDescription: >-
           Discovers nearby devices so they can share work in the node mesh.
+        NSCameraUsageDescription: >-
+          Renders the camera as an ambient glyph display. Frames are converted
+          to characters on this device; no image is stored or sent.
         # Cleartext to the Mac's model server during development.
         #
         # NSAllowsLocalNetworking is not enough: it covers link-local, .local,

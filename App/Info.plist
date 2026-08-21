@@ -38,6 +38,8 @@
 		<string>_node33-mesh._tcp</string>
 		<string>_node33-mesh._udp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Renders the camera as an ambient glyph display. Frames are converted to characters on this device; no image is stored or sent.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Discovers nearby devices so they can share work in the node mesh.</string>
 </dict>
