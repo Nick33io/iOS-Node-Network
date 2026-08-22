@@ -316,6 +316,14 @@ private struct NodeCard: View {
       if let thermal = node.thermal { Field("thermal", thermal) }
       if let power = node.power { Field("power", power) }
       if let latency = node.probeMilliseconds { Field("probe", "\(latency) ms") }
+      if let detail = node.failureDetail {
+        Text(detail)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red.opacity(0.85))
+          .lineLimit(3)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, 2)
+      }
 
       HStack(spacing: 14) {
         Button("REFRESH", action: refresh)

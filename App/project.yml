@@ -96,6 +96,13 @@ targets:
         # This is an internal fleet tool talking to machines the owner
         # controls. A shipped build reaches nodes over HTTPS through the broker
         # and drops this entirely.
+        # NSAllowsLocalNetworking is deliberately absent. On iOS 10 and later,
+        # setting any of the specific ATS keys (NSAllowsLocalNetworking,
+        # NSAllowsArbitraryLoadsInWebContent, NSAllowsArbitraryLoadsForMedia)
+        # makes the system IGNORE NSAllowsArbitraryLoads entirely and honour
+        # only the specific ones. Having both reduced "allow everything" to
+        # "allow local networking", which does not cover Tailscale's CGNAT
+        # range — so every tailnet node kept failing with -1022 while the
+        # plist looked permissive.
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true

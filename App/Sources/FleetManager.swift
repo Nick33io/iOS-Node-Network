@@ -38,6 +38,10 @@ struct FleetNode: Identifiable, Sendable {
   var fingerprint: String?
   /// Set when another entry already claimed this machine.
   var aliasOf: String?
+  /// The underlying failure, verbatim. A summarised reason ("asleep") is a
+  /// guess, and a wrong guess sends you looking at the wrong device — so keep
+  /// what the network actually said.
+  var failureDetail: String?
 
   var isReachable: Bool {
     if case .reachable = state { return true }
@@ -181,10 +185,15 @@ final class FleetManager {
       updated.state = .unreachable("bad address")
       return updated
     }
+    updated.failureDetail = nil
     var request = URLRequest(url: url)
-    // Short: a node that cannot answer a health check in four seconds is not
-    // one the scheduler should be handing work to anyway.
-    request.timeoutInterval = 4
+    // Generous on purpose. Four seconds was enough for a warm direct path and
+    // not for a cold one: the first connection to an idle Tailscale peer has
+    // to complete NAT traversal or fall back to a relay, and on a phone the
+    // app may also be waking. The short timeout reported those nodes as
+    // offline, which is indistinguishable from a genuinely sleeping device.
+    request.timeoutInterval = 12
+    request.cachePolicy = .reloadIgnoringLocalCacheData
 
     let started = Date()
     do {
@@ -213,9 +222,19 @@ final class FleetManager {
       return updated
     } catch {
       updated.probeMilliseconds = nil
-      // The common case by far is a suspended iOS app, so say that rather than
-      // surfacing a URLSession error code the reader has to decode.
-      let reason = (error as NSError).code == NSURLErrorTimedOut ? "asleep" : "offline"
+      let failure = error as NSError
+      updated.failureDetail = "\(failure.domain) \(failure.code): \(failure.localizedDescription)"
+      // A short label for the card, with the verbatim error kept alongside so
+      // a wrong guess here does not send anyone to the wrong device.
+      let reason: String
+      switch failure.code {
+      case NSURLErrorTimedOut: reason = "no answer"
+      case NSURLErrorCannotConnectToHost: reason = "refused"
+      case NSURLErrorNotConnectedToInternet: reason = "no network"
+      case NSURLErrorAppTransportSecurityRequiresSecureConnection: reason = "blocked by ATS"
+      case NSURLErrorNetworkConnectionLost: reason = "connection lost"
+      default: reason = "offline"
+      }
       updated.state = .unreachable(reason)
       return updated
     }
