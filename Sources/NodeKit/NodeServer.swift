@@ -28,6 +28,9 @@
     public private(set) var isListening = false
     public private(set) var lastError: String?
     public private(set) var served = 0
+    /// Bytes written to clients. Sampled as a rate by the telemetry panel, so
+    /// a cumulative counter is all that is needed here.
+    public private(set) var servedBytes: UInt64 = 0
 
     private var listener: NWListener?
     private let makeWriter: @MainActor () async throws -> any DeviceWriter
@@ -193,6 +196,7 @@
     }
 
     private func sendRaw(status: String, body: Data, on connection: NWConnection) {
+      servedBytes &+= UInt64(body.count)
     var response = Data(
       """
       HTTP/1.1 \(status)\r
@@ -221,6 +225,7 @@
         """.utf8
       )
       response.append(body)
+      servedBytes &+= UInt64(body.count)
       connection.send(
         content: response,
         completion: .contentProcessed { _ in connection.cancel() }

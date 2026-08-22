@@ -39,6 +39,11 @@ final class RunModel {
   /// ~2.3 GB; a silent first run looks like a hang.
   var loadProgress: Double = 0
 
+  /// Tokens produced in the current run, accumulated as sections land so the
+  /// meter moves during a task rather than only at the end.
+  var tokensThisRun = 0
+  var tokensPerSecondLive: Double = 0
+
   /// Measured speed of this device, once benchmarked.
   var benchmark: BenchmarkResult?
   var benchmarkError: String?
@@ -107,6 +112,8 @@ final class RunModel {
     guard !isRunning else { return }
     sections = []
     title = ""
+    tokensThisRun = 0
+    tokensPerSecondLive = 0
     phase = .planning
 
     guard let base = URL(string: "http://\(host):11434") else {
@@ -127,10 +134,18 @@ final class RunModel {
       )
 
       let started = Date()
+      let sectionStarted = Date()
       let document = try await pipeline.run(brief: Demo.brief, targetWords: 500) { section in
         Task { @MainActor [weak self] in
-          self?.phase = .writing
-          self?.sections.append(section)
+          guard let self else { return }
+          self.phase = .writing
+          self.sections.append(section)
+          // Character-derived: the tokenizer is not exposed through
+          // DeviceWriter, and ~4 chars per token is close enough for a meter.
+          let tokens = max(1, section.text.count / 4)
+          self.tokensThisRun += tokens
+          let elapsed = -sectionStarted.timeIntervalSinceNow
+          if elapsed > 0 { self.tokensPerSecondLive = Double(self.tokensThisRun) / elapsed }
         }
       }
       title = document.title

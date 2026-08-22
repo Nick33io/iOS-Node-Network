@@ -12,6 +12,9 @@ struct RootView: View {
   /// the thumbnail puts it back.
   @State private var showingConsole = false
   @State private var ambient = AmbientDisplay()
+  @State private var telemetry = NodeTelemetry()
+  /// Whether the console shows instruments or the text produced so far.
+  @State private var showingOutput = false
   #if canImport(AVFoundation) && !targetEnvironment(simulator)
     @State private var camera = CameraGlyphSource()
   #endif
@@ -49,13 +52,15 @@ struct RootView: View {
           if mesh.isJoined {
             matrixThumbnail
           }
-          nodeSection
+          instrumentHeader
+          instrumentsSection
+          taskSection
+          if showingOutput {
+            outputSection
+          }
           ambientSection
           serverSection
           meshSection
-          egressSection
-          runSection
-          if !model.sections.isEmpty { outputSection }
         }
         .padding(20)
       }
@@ -65,6 +70,7 @@ struct RootView: View {
     }
     .tint(.white)
     .task {
+      telemetry.start { server?.servedBytes ?? 0 }
       // Test hook: lets a harness exercise a full run without driving the UI.
       guard ProcessInfo.processInfo.arguments.contains("-autorun") else { return }
       await model.run()
@@ -264,6 +270,108 @@ struct RootView: View {
       }
       .padding(.top, 6)
     }
+  }
+
+  // MARK: Instruments
+
+  private var isConnected: Bool {
+    server?.isListening == true || mesh.isJoined
+  }
+
+  private var instrumentHeader: some View {
+    HStack(spacing: 10) {
+      StatusDot(isUp: isConnected)
+      Text(profile.identifier)
+        .font(.system(.callout, design: .monospaced).weight(.semibold))
+      Spacer()
+      Text(isConnected ? "ONLINE" : "OFFLINE")
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(isConnected ? .green : .red)
+    }
+  }
+
+  private var instrumentsSection: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Meter(
+        key: "memory",
+        value: telemetry.footprintLabel,
+        fraction: telemetry.memoryFraction,
+        warnAbove: 0.7
+      )
+      Meter(
+        key: "thermal",
+        value: telemetry.thermalLabel,
+        fraction: telemetry.thermalFraction,
+        warnAbove: 0.5
+      )
+      Meter(
+        key: "power",
+        value: telemetry.powerLabel,
+        fraction: telemetry.powerFraction,
+        // Low power is the warning here, so the usual high-is-bad rule is
+        // inverted — handled by tint rather than a threshold.
+        tint: telemetry.powerFraction < 0.2 ? .orange : .green
+      )
+      Meter(
+        key: "bandwidth",
+        value: telemetry.bandwidthLabel,
+        fraction: telemetry.bandwidthFraction
+      )
+    }
+  }
+
+  // MARK: Task
+
+  private var taskSection: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("TASK")
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(.tertiary)
+        .tracking(2)
+
+      Meter(
+        key: "throughput",
+        value: String(format: "%.1f tok/s", liveRate),
+        // 80 tok/s tops this fleet; a fixed ceiling keeps the bar comparable
+        // between runs and between devices.
+        fraction: min(1, liveRate / 80)
+      )
+      Row(key: "tokens", value: "\(model.tokensThisRun)")
+      Row(key: "sections", value: "\(model.sections.count)")
+      Row(key: "status", value: statusText, tint: statusTint)
+
+      HStack(spacing: 14) {
+        Button("BENCH") { Task { await model.runBenchmark() } }
+          .disabled(model.isRunning)
+        Button(model.isRunning ? "RUNNING" : "START") { Task { await model.run() } }
+          .fontWeight(.semibold)
+          .disabled(model.isRunning)
+        Spacer()
+        Button(showingOutput ? "HIDE TEXT" : "SHOW TEXT") {
+          withAnimation(.easeInOut(duration: 0.2)) { showingOutput.toggle() }
+        }
+        .disabled(model.sections.isEmpty)
+      }
+      .font(.system(.caption, design: .monospaced))
+
+      if let bench = model.benchmark {
+        Row(key: "measured", value: String(format: "%.1f tok/s", bench.tokensPerSecond), tint: .green)
+      }
+      if let failure = model.benchmarkError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(4)
+      }
+    }
+  }
+
+  /// Live rate while running, last measured rate otherwise, so the meter does
+  /// not drop to zero the moment a task ends.
+  private var liveRate: Double {
+    model.isRunning && model.tokensPerSecondLive > 0
+      ? model.tokensPerSecondLive
+      : (model.benchmark?.tokensPerSecond ?? model.tokensPerSecondLive)
   }
 
   // MARK: Node
