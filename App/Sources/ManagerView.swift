@@ -336,6 +336,7 @@ private struct NodeCard: View {
   }
 
   private var statusColor: Color {
+    if node.aliasOf != nil { return .orange }
     switch node.state {
     case .reachable: return .green
     case .idle: return .yellow
@@ -345,6 +346,7 @@ private struct NodeCard: View {
   }
 
   private var statusText: String {
+    if let owner = node.aliasOf { return "same as \(owner)" }
     switch node.state {
     case .reachable: return "up"
     // A node on battery reports suitedToLongWork false: available, but not for

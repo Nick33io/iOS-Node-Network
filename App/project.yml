@@ -82,17 +82,20 @@ targets:
         NSCameraUsageDescription: >-
           Renders the camera as an ambient glyph display. Frames are converted
           to characters on this device; no image is stored or sent.
-        # Cleartext to the Mac's model server during development.
+        # Cleartext over the tailnet during development.
         #
-        # NSAllowsLocalNetworking is not enough: it covers link-local, .local,
-        # and RFC1918 ranges, but Tailscale hands out 100.64.0.0/10 (CGNAT),
-        # which ATS does not treat as local. The tailnet address therefore
-        # needs its own exception.
+        # A per-address exception cannot work here. The fleet is addressed by
+        # tailnet IP, nodes can be added at runtime, and ATS has no wildcard
+        # for an IP range — so pinning exceptions to known hosts silently
+        # blocked every node except the one that happened to be listed, which
+        # presented as "the fleet is offline" rather than as a config error.
         #
-        # A shipped build talks to the broker over HTTPS and drops all of this.
+        # NSAllowsLocalNetworking does not cover it either: Tailscale hands out
+        # 100.64.0.0/10 (CGNAT), which ATS does not treat as local.
+        #
+        # This is an internal fleet tool talking to machines the owner
+        # controls. A shipped build reaches nodes over HTTPS through the broker
+        # and drops this entirely.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-          NSExceptionDomains:
-            100.73.112.15:
-              NSExceptionAllowsInsecureHTTPLoads: true
-              NSIncludesSubdomains: false
+          NSAllowsArbitraryLoads: true

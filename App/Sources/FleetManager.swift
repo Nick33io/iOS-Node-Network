@@ -29,6 +29,15 @@ struct FleetNode: Identifiable, Sendable {
   var tokensPerSecond: Double?
   var lastProbe: Date?
   var probeMilliseconds: Int?
+  /// Identifies the machine behind the address.
+  ///
+  /// Several roster entries can answer from one host — a stale address, an
+  /// alias, a routing quirk. Without this they all adopt that machine's
+  /// reported label after a probe and the list reads as duplicates, while the
+  /// fleet silently counts one device as several.
+  var fingerprint: String?
+  /// Set when another entry already claimed this machine.
+  var aliasOf: String?
 
   var isReachable: Bool {
     if case .reachable = state { return true }
@@ -133,6 +142,27 @@ final class FleetManager {
         }
       }
     }
+    markAliases()
+  }
+
+  /// Flags entries that turned out to be the same machine as an earlier one.
+  ///
+  /// Kept rather than deleted: the address is still in the roster for a reason,
+  /// and silently removing it would look like the app losing nodes. Marking it
+  /// says what is actually true — two names, one device.
+  private func markAliases() {
+    var claimed: [String: String] = [:]
+    for index in nodes.indices {
+      nodes[index].aliasOf = nil
+      guard let fingerprint = nodes[index].fingerprint, !fingerprint.isEmpty,
+        nodes[index].isReachable
+      else { continue }
+      if let owner = claimed[fingerprint], owner != nodes[index].id {
+        nodes[index].aliasOf = owner
+      } else {
+        claimed[fingerprint] = nodes[index].id
+      }
+    }
   }
 
   func refresh(_ node: FleetNode) async {
@@ -141,6 +171,7 @@ final class FleetManager {
     var updated = await Self.probe(node)
     updated.tokensPerSecond = updated.tokensPerSecond ?? existing
     nodes[index] = updated
+    markAliases()
   }
 
   private static func probe(_ node: FleetNode) async -> FleetNode {
@@ -167,6 +198,7 @@ final class FleetManager {
       }
       let capabilities = payload["capabilities"] as? [String: Any] ?? [:]
       let profile = payload["profile"] as? [String: Any] ?? [:]
+      updated.fingerprint = profile["fingerprint"] as? String
       updated.hardware = capabilities["hardware"] as? String
       updated.model = capabilities["model"] as? String
       updated.backend = capabilities["backend"] as? String
@@ -236,8 +268,11 @@ final class FleetManager {
   /// Sum of measured throughput. Only counts nodes actually measured, so it
   /// reads as fleet capacity rather than an average diluted by unknowns.
   var aggregateTokensPerSecond: Double {
-    nodes.compactMap(\.tokensPerSecond).reduce(0, +)
+    nodes.filter { $0.aliasOf == nil }.compactMap(\.tokensPerSecond).reduce(0, +)
   }
 
-  var reachableCount: Int { nodes.filter(\.isReachable).count }
+  /// Distinct machines that are up. An alias must not inflate the count — the
+  /// whole point of the fleet view is knowing how much hardware is actually
+  /// available.
+  var reachableCount: Int { nodes.filter { $0.isReachable && $0.aliasOf == nil }.count }
 }
