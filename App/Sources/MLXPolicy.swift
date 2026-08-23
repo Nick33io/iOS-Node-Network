@@ -20,7 +20,20 @@ enum MLXPolicy {
   /// Both entries are pinned to immutable commits. The app does not follow
   /// `main`; changing a revision is a reviewed code change, never an
   /// automatic "latest".
-  static let model = PinnedModel.qwen3_1_7B_4bit
+  /// Chosen by installed memory rather than fixed.
+  ///
+  /// The fleet is deliberately heterogeneous — an M4 iPad has room the 15 Pro
+  /// Max does not — and pinning every device to the smallest model wastes the
+  /// large ones. 12 GB is the threshold because the 4B needs ~2.3 GB of weights
+  /// plus KV cache and headroom, which an 8 GB device cannot give it under
+  /// jetsam.
+  ///
+  /// The manifest travels with the model, so switching here cannot desync the
+  /// revision from its digests.
+  static var model: PinnedModel {
+    let installedGB = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+    return installedGB >= 12 ? .qwen3_4B_4bit : .qwen3_1_7B_4bit
+  }
 
   static var allowedModel: String { model.id }
   static var allowedModelRevision: String { model.revision }

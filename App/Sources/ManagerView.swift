@@ -12,6 +12,11 @@ struct ManagerView: View {
   /// has nothing to ask of anyone. Tap to bring the console back.
   @State private var showingRain = false
   @State private var ambient = AmbientDisplay()
+  // The iPad is the largest mobile device here; leaving it as an observer
+  // wastes the node with the most headroom. It manages and serves.
+  @State private var node = RunModel()
+  @State private var telemetry = NodeTelemetry()
+  @State private var server: NodeServer?
   #if canImport(AVFoundation) && !targetEnvironment(simulator)
     @State private var camera = CameraGlyphSource()
   #endif
@@ -42,6 +47,7 @@ struct ManagerView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           summary
+          selfNodePanel
           LazyVGrid(columns: columns, spacing: 16) {
             ForEach(fleet.nodes) { node in
               NodeCard(
@@ -99,6 +105,10 @@ struct ManagerView: View {
         }
       }
       .task {
+        telemetry.start { server?.servedBytes ?? 0 }
+        // Serve by default: a manager that has to be told to contribute is a
+        // manager that mostly does not.
+        ensureServer().start()
         await fleet.refreshAll()
       }
       .sheet(isPresented: $showingAdd) { addSheet }
@@ -140,6 +150,118 @@ struct ManagerView: View {
         }
       }
     #endif
+  }
+
+  /// This device acting as a node, alongside its role as manager.
+  private var selfNodePanel: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack(spacing: 10) {
+        StatusDot(isUp: server?.isListening == true)
+        Text("THIS DEVICE")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+          .tracking(2)
+        Spacer()
+        Text(server?.isListening == true ? "SERVING :8833" : "NOT SERVING")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(server?.isListening == true ? .green : .secondary)
+      }
+
+      HStack(alignment: .top, spacing: 24) {
+        VStack(alignment: .leading, spacing: 12) {
+          Meter(
+            key: "memory", value: telemetry.footprintLabel,
+            fraction: telemetry.memoryFraction, warnAbove: 0.7)
+          Meter(
+            key: "thermal", value: telemetry.thermalLabel,
+            fraction: telemetry.thermalFraction, warnAbove: 0.5)
+        }
+        VStack(alignment: .leading, spacing: 12) {
+          Meter(
+            key: "power", value: telemetry.powerLabel,
+            fraction: telemetry.powerFraction)
+          Meter(
+            key: "bandwidth", value: telemetry.bandwidthLabel,
+            fraction: telemetry.bandwidthFraction)
+        }
+      }
+
+      Meter(
+        key: "throughput",
+        value: selfRate > 0 ? String(format: "%.1f tok/s", selfRate) : "unmeasured",
+        // Same 80 tok/s ceiling the phone panel and the node cards use, so a
+        // glance across manager, self, and fleet compares like for like.
+        fraction: min(1, selfRate / 80)
+      )
+      if server?.tokensServed ?? 0 > 0 {
+        HStack {
+          Text("tokens served")
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.secondary)
+          Spacer()
+          Text("\(server?.tokensServed ?? 0)")
+            .font(.system(.caption2, design: .monospaced))
+        }
+      }
+
+      HStack {
+        Text(MLXPolicy.allowedModel)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        Spacer()
+        Button("MEASURE") {
+          Task { await node.runBenchmark() }
+        }
+        .font(.system(.caption, design: .monospaced))
+        .disabled(node.isRunning)
+        Button(server?.isListening == true ? "STOP" : "SERVE") {
+          if server?.isListening == true {
+            server?.stop()
+          } else {
+            ensureServer().start()
+          }
+        }
+        .font(.system(.caption, design: .monospaced).weight(.semibold))
+      }
+      if let failure = server?.lastError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(2)
+      }
+    }
+    .padding(16)
+    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+  }
+
+  /// Live rate while serving, falling back to this device's own benchmark so
+  /// the meter reads something before anyone has dispatched work here.
+  private var selfRate: Double {
+    let served = server?.lastTokensPerSecond ?? 0
+    if served > 0 { return served }
+    return node.benchmark?.tokensPerSecond ?? node.tokensPerSecondLive
+  }
+
+  @discardableResult
+  private func ensureServer() -> NodeServer {
+    if let server { return server }
+    let created = NodeServer(
+      limits: MLXPolicy.limits,
+      makeWriter: { try await node.writerForServing() },
+      describe: {
+        BridgeProfileEmitter.payload(
+          node: BridgeProfileEmitter.nodeIdentity,
+          label: UIDevice.current.name,
+          backend: node.backend.label,
+          model: node.backend == .onDevice ? MLXPolicy.allowedModel : node.writerModel,
+          limits: MLXPolicy.limits
+        )
+      }
+    )
+    server = created
+    return created
   }
 
   private var summary: some View {

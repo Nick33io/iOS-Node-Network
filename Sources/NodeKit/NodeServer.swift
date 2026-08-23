@@ -31,6 +31,13 @@
     /// Bytes written to clients. Sampled as a rate by the telemetry panel, so
     /// a cumulative counter is all that is needed here.
     public private(set) var servedBytes: UInt64 = 0
+    /// Throughput of the most recent generation this node served.
+    ///
+    /// A serving node never initiates a task, so without recording what it did
+    /// for someone else it has no throughput to report — the one device in the
+    /// fleet whose speed is invisible to itself.
+    public private(set) var lastTokensPerSecond: Double = 0
+    public private(set) var tokensServed = 0
 
     private var listener: NWListener?
     private let makeWriter: @MainActor () async throws -> any DeviceWriter
