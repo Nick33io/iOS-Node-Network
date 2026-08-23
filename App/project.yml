@@ -55,14 +55,12 @@ targets:
       # XcodeGen generates this file from `properties` and overwrites whatever
       # is on disk. A path with no properties produced an empty <dict/>, so the
       # entitlement was silently absent even before signing could strip it.
-      properties: {}
-        # com.apple.developer.kernel.increased-memory-limit: true
-        #
-        # Left off until the capability is enabled on the App ID. Declaring it
-        # without that makes signing fail outright rather than stripping it
-        # quietly, which blocks every build. Re-enable the line above once
-        # Xcode has added the capability, and nodes will pick up larger models
-        # on their own — selection reads os_proc_available_memory at launch.
+      properties:
+        # Roughly doubles the jetsam ceiling. Requires the matching capability
+        # on the App ID — without it signing fails outright rather than
+        # stripping the key quietly, which is the behaviour worth keeping: a
+        # silent strip cost us several debugging rounds.
+        com.apple.developer.kernel.increased-memory-limit: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
