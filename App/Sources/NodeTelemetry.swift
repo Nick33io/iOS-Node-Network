@@ -14,6 +14,10 @@ final class NodeTelemetry {
   /// not `physicalMemory`, and not what Activity Monitor calls "memory used".
   private(set) var footprintBytes: UInt64 = 0
   private(set) var memoryLimitBytes: UInt64 = 0
+  /// Installed RAM. Shown as the denominator because that is the number people
+  /// know their device by — "16 GB" — even though the jetsam ceiling the bar
+  /// fills against is roughly half of it.
+  private(set) var installedBytes: UInt64 = 0
   private(set) var thermal: ProcessInfo.ThermalState = .nominal
   private(set) var batteryLevel: Float = -1
   private(set) var batteryState: UIDevice.BatteryState = .unknown
@@ -33,6 +37,7 @@ final class NodeTelemetry {
 
   init() {
     UIDevice.current.isBatteryMonitoringEnabled = true
+    installedBytes = ProcessInfo.processInfo.physicalMemory
     memoryLimitBytes = Self.jetsamEstimate()
     sample(servedBytes: 0)
   }
@@ -118,8 +123,15 @@ final class NodeTelemetry {
   /// normally serves, and it sits well under that.
   var bandwidthFraction: Double { min(1, bytesPerSecond / 65_536) }
 
+  /// `0.03/16 GB` — used against installed.
+  ///
+  /// The bar still fills against the jetsam ceiling, not this total: a device
+  /// is killed at roughly half its installed RAM, so a bar drawn against 16 GB
+  /// would sit at a third when the process is actually about to die.
   var footprintLabel: String {
-    String(format: "%.2f GB", Double(footprintBytes) / 1_073_741_824)
+    let usedGB = Double(footprintBytes) / 1_073_741_824
+    let totalGB = Double(installedBytes) / 1_073_741_824
+    return String(format: "%.2f/%.0f GB", usedGB, totalGB.rounded())
   }
 
   // MARK: Platform

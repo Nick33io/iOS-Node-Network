@@ -442,7 +442,13 @@ private struct NodeCard: View {
 
       Field("host", node.host)
       if let hardware = node.hardware { Field("hardware", hardware) }
-      if let memory = node.memoryGiB { Field("memory", String(format: "%.0f GiB", memory)) }
+      if let memory = node.memoryGiB {
+        Field(
+          "memory",
+          node.footprintGiB.map { String(format: "%.2f/%.0f GB", $0, memory) }
+            ?? String(format: "%.0f GB", memory)
+        )
+      }
       if let model = node.model { Field("model", model) }
       if let backend = node.backend { Field("backend", backend) }
       if let thermal = node.thermal { Field("thermal", thermal) }

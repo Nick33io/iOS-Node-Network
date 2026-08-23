@@ -22,6 +22,8 @@ struct FleetNode: Identifiable, Sendable {
   var thermal: String?
   var power: String?
   var memoryGiB: Double?
+  /// Resident footprint on that node, when it reports one.
+  var footprintGiB: Double?
   var suitedToLongWork: Bool?
   /// Last measured throughput. Nil until this node has been benchmarked —
   /// deliberately not defaulted to zero, which would read as "measured and slow"
@@ -219,6 +221,7 @@ final class FleetManager {
       updated.power = capabilities["power"] as? String
       updated.suitedToLongWork = capabilities["suitedToLongWork"] as? Bool
       updated.memoryGiB = profile["memoryGiB"] as? Double
+      updated.footprintGiB = capabilities["footprintGiB"] as? Double
       if let label = profile["label"] as? String, !label.isEmpty, label != "iPhone" {
         updated.label = label
       }
