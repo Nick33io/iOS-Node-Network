@@ -35,9 +35,28 @@ struct ModelFile: Sendable {
 struct PinnedModel: Sendable {
   let id: String
   let revision: String
+
+  /// Transformer shape, for sizing the KV cache.
+  let layers: Int
+  let kvHeads: Int
+  let headDim: Int
+
   let files: [ModelFile]
 
   var totalBytes: Int64 { files.reduce(0) { $0 + $1.size } }
+
+  /// Bytes this model needs resident to generate at `context` tokens.
+  ///
+  /// Weights plus KV cache plus a fixed allowance for the tokenizer, MLX's
+  /// arenas, and the app itself. This replaces a flat "double the weights"
+  /// rule, which was wrong in both directions: far too generous for a small
+  /// model and needlessly strict for a large one, because the KV cache scales
+  /// with context and layer count, not with weight size.
+  func residentBytes(context: Int) -> Int64 {
+    let kv = Int64(context * layers * 2 * kvHeads * headDim * 2)
+    let overhead: Int64 = 400 * 1024 * 1024
+    return totalBytes + kv + overhead
+  }
 
   /// 0.98 GB. Default: small enough to load on an 8 GB device with room for
   /// the KV cache, even without the increased-memory-limit entitlement.
@@ -49,6 +68,7 @@ struct PinnedModel: Sendable {
   static let qwen3_1_7B_4bit = PinnedModel(
     id: "mlx-community/Qwen3-1.7B-4bit",
     revision: "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+    layers: 28, kvHeads: 8, headDim: 128,
     files: [
       .init(path: "added_tokens.json", size: 707, digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
       .init(path: "config.json", size: 937, digest: .gitBlob("0a78ffc3980b062021a450199988d0ed8537239d")),
@@ -66,6 +86,7 @@ struct PinnedModel: Sendable {
   static let qwen3_8B_4bit = PinnedModel(
     id: "mlx-community/Qwen3-8B-4bit",
     revision: "545dc4251c05440727734bcd94334791f6ab0192",
+    layers: 36, kvHeads: 8, headDim: 128,
     files: [
       .init(path: "added_tokens.json", size: 707, digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
       .init(path: "config.json", size: 939, digest: .gitBlob("6f2a32b76648381bea25bdc81fad0e7160f86ac5")),
@@ -83,6 +104,7 @@ struct PinnedModel: Sendable {
   static let qwen3_4B_4bit = PinnedModel(
     id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
     revision: "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
+    layers: 36, kvHeads: 8, headDim: 128,
     files: [
       .init(path: "added_tokens.json", size: 707, digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
       .init(path: "chat_template.jinja", size: 4_040, digest: .gitBlob("a18870ad4ba26ac6c43758fc506c1bb6ff206bb4")),

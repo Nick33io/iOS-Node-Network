@@ -52,6 +52,15 @@ targets:
         product: Transformers
     entitlements:
       path: NodeNetwork.entitlements
+      # XcodeGen generates this file from `properties` and overwrites whatever
+      # is on disk. A path with no properties produced an empty <dict/>, so the
+      # entitlement was silently absent even before signing could strip it.
+      properties:
+        # Raises the jetsam ceiling — roughly 5 GB to 9 GB on the 16 GB iPad,
+        # 3.5 GB to 5.5 GB on an 8 GB phone. Requires the matching capability
+        # on the App ID; without it codesign drops this key and the app simply
+        # runs with less memory rather than failing to build.
+        com.apple.developer.kernel.increased-memory-limit: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

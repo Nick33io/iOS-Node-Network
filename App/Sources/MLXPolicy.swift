@@ -40,8 +40,16 @@ enum MLXPolicy {
     // present in the source and stripped at signing.
     // Largest that actually fits, asked of the OS rather than assumed from
     // installed RAM — the two differ by whatever the entitlement was granted.
-    if installedGB >= 12, canHost(.qwen3_8B_4bit) { return .qwen3_8B_4bit }
-    if canHost(.qwen3_4B_4bit) { return .qwen3_4B_4bit }
+    // Tried at reduced context too, so a device that cannot host a model at
+    // 4096 still gets it at 2048 rather than dropping a whole size class.
+    let candidates: [PinnedModel] = [.qwen3_8B_4bit, .qwen3_4B_4bit]
+    for candidate in candidates
+    where installedGB >= 8 && canHost(candidate, context: affordableContext(for: candidate))
+      && affordableContext(for: candidate) >= 2048
+      && canHost(candidate, context: 2048)
+    {
+      return candidate
+    }
     return .qwen3_1_7B_4bit
   }
 
@@ -54,13 +62,29 @@ enum MLXPolicy {
   /// Asking costs nothing and cannot be wrong.
   static var availableMemoryBytes: Int { os_proc_available_memory() }
 
-  /// Whether this device can actually hold the given model plus working set.
+  /// Whether this device can hold the model and generate at `context`.
   ///
-  /// Doubles the weight size: KV cache, the tokenizer, and MLX's own arenas
-  /// roughly match the weights during generation, and a model that loads and
-  /// then dies on the first long prompt is worse than one that never loaded.
-  static func canHost(_ candidate: PinnedModel) -> Bool {
-    Int(candidate.totalBytes) * 2 < availableMemoryBytes
+  /// Sized from the actual working set rather than a multiple of the weights.
+  /// A 15% margin covers measurement drift and whatever else the system does
+  /// while a task runs; being killed mid-generation costs the whole task, so
+  /// the margin is worth more than the last few hundred megabytes.
+  static func canHost(_ candidate: PinnedModel, context: Int = 4096) -> Bool {
+    Double(candidate.residentBytes(context: context)) * 1.15
+      < Double(availableMemoryBytes)
+  }
+
+  /// The context this device can afford for a given model.
+  ///
+  /// Halving context halves the KV cache, which is the only part of the
+  /// working set that can be traded. On a device that cannot quite fit a model
+  /// at full context, a shorter one is the difference between running a larger
+  /// model and not running it — and the section loop already caps prompts well
+  /// below 4096, so the loss is mostly theoretical.
+  static func affordableContext(for candidate: PinnedModel) -> Int {
+    for context in [4096, 3072, 2048] where canHost(candidate, context: context) {
+      return context
+    }
+    return 2048
   }
 
   /// True when the process has meaningfully more headroom than an
@@ -95,7 +119,19 @@ enum MLXPolicy {
     return min(half, 8_053_063_680)
   }
 
-  static let limits = DeviceLimits.qwen3_4B_4bit
+  /// Limits follow the chosen model's affordable context rather than being
+  /// fixed, so a node that had to shorten context reports that honestly to the
+  /// fleet instead of advertising a window it cannot serve.
+  static var limits: DeviceLimits {
+    let context = affordableContext(for: model)
+    return DeviceLimits(
+      maxContextTokens: context,
+      maxInputCharacters: min(3072, context - 1024),
+      maxInputTokens: min(3072, context - 1024),
+      maxOutputTokens: 512,
+      contextHeadroomTokens: 512
+    )
+  }
 
   /// Fixed instructions, reasserted before every generation. The writer has no
   /// tools and no network surface; saying so plainly is cheaper than letting
