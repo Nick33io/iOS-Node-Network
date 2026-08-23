@@ -17,6 +17,10 @@ struct ManagerView: View {
   @State private var node = RunModel()
   @State private var telemetry = NodeTelemetry()
   @State private var server: NodeServer?
+  @State private var models = ModelStore()
+  #if canImport(MLX) && !targetEnvironment(simulator)
+    @State private var writer = MLXWriter()
+  #endif
   #if canImport(AVFoundation) && !targetEnvironment(simulator)
     @State private var camera = CameraGlyphSource()
   #endif
@@ -48,6 +52,7 @@ struct ManagerView: View {
         VStack(alignment: .leading, spacing: 20) {
           summary
           selfNodePanel
+          modelsPanel
           LazyVGrid(columns: columns, spacing: 16) {
             ForEach(fleet.nodes) { node in
               NodeCard(
@@ -278,6 +283,75 @@ struct ManagerView: View {
     )
     server = created
     return created
+  }
+
+  /// Weights on disk and in memory.
+  private var modelsPanel: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Text("MODELS")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+          .tracking(2)
+        Spacer()
+        Text("\(models.diskLabel) · \(models.freeSpaceLabel)")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+      }
+
+      ForEach(models.entries) { entry in
+        ModelRow(
+          entry: entry,
+          isLoaded: models.loadedModelID == entry.id,
+          isBusy: models.busyModelID == entry.id,
+          anyBusy: models.busyModelID != nil,
+          progress: models.progress,
+          download: { Task { await downloadModel(entry) } },
+          load: { Task { await loadModel(entry) } },
+          unload: { unloadModel() },
+          evict: { models.evict(entry) }
+        )
+      }
+
+      if !models.status.isEmpty {
+        Text(models.status)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.green)
+      }
+      if let failure = models.lastError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(3)
+      }
+      Text("headroom \(String(format: "%.2f GB", Double(MLXPolicy.availableMemoryBytes) / 1_073_741_824))")
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(.tertiary)
+    }
+    .padding(16)
+    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+  }
+
+  private func downloadModel(_ entry: ModelStore.Entry) async {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      await models.download(entry, using: writer)
+    #else
+      models.lastError = "MLX is unavailable in this build"
+    #endif
+  }
+
+  private func loadModel(_ entry: ModelStore.Entry) async {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      await models.load(entry, using: writer)
+    #else
+      models.lastError = "MLX is unavailable in this build"
+    #endif
+  }
+
+  private func unloadModel() {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      models.unload(using: writer)
+    #endif
   }
 
   private var summary: some View {
@@ -554,5 +628,72 @@ private struct Stat: View {
         .font(.system(.title3, design: .monospaced).weight(.semibold))
         .foregroundStyle(tint)
     }
+  }
+}
+
+
+/// One catalogue entry.
+///
+/// Extracted from `ManagerView` because SwiftUI's type inference gives up on
+/// deeply nested conditional views inside a ForEach, and the errors it emits
+/// point nowhere near the cause.
+private struct ModelRow: View {
+  let entry: ModelStore.Entry
+  let isLoaded: Bool
+  let isBusy: Bool
+  let anyBusy: Bool
+  let progress: Double
+  let download: () -> Void
+  let load: () -> Void
+  let unload: () -> Void
+  let evict: () -> Void
+
+  private var fits: Bool { MLXPolicy.canHost(entry.model) }
+
+  private var dotColor: Color {
+    if isLoaded { return .green }
+    return entry.isDownloaded ? .green.opacity(0.35) : .gray.opacity(0.4)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        Circle().fill(dotColor).frame(width: 7, height: 7)
+        Text(entry.shortName)
+          .font(.system(.caption, design: .monospaced).weight(.medium))
+        Spacer()
+        // Disk size and resident requirement are different numbers and both
+        // matter: one decides whether it downloads, the other whether it runs.
+        Text("\(entry.sizeLabel) · needs \(entry.residentLabel)")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(fits ? Color.secondary : Color.orange)
+      }
+
+      if isBusy {
+        ProgressView(value: progress).tint(.green)
+      }
+
+      HStack(spacing: 12) {
+        if !entry.isDownloaded {
+          Button("DOWNLOAD", action: download).disabled(anyBusy)
+        } else if isLoaded {
+          Button("UNLOAD", action: unload)
+        } else {
+          Button("LOAD", action: load).disabled(anyBusy || !fits)
+        }
+        if entry.isDownloaded {
+          Button("EVICT", action: evict).disabled(anyBusy || isLoaded)
+        }
+        Spacer()
+        if !fits {
+          Text("exceeds headroom")
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.orange)
+        }
+      }
+      .font(.system(.caption2, design: .monospaced))
+      .buttonStyle(.plain)
+    }
+    .padding(.vertical, 6)
   }
 }

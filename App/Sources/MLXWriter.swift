@@ -40,17 +40,43 @@ import WriteCore
     /// Separate from `generate` so the caller can show progress: the weights
     /// are ~2.3 GB, and a first launch that silently blocks for minutes is
     /// indistinguishable from a hang.
-    func load(progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+    /// Which model is resident, if any.
+    private(set) var loadedModel: PinnedModel?
+
+    /// Fetches and verifies weights without loading them.
+    ///
+    /// Separate from `load` because the two costs are different in kind: a
+    /// download is gigabytes over whatever network is available, a load is
+    /// seconds of local work. A device should be able to fetch while it has
+    /// power and bandwidth, and load when it is asked to do work.
+    func prefetch(
+      _ model: PinnedModel,
+      progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws {
+      _ = try await PinnedModelDownloader(model: model).download(
+        id: model.id, revision: model.revision,
+        matching: ["*.safetensors", "*.json", "*.jinja"], useLatest: false,
+        progressHandler: { progress($0.fractionCompleted) }
+      )
+    }
+
+    func load(
+      _ model: PinnedModel = MLXPolicy.model,
+      progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws {
+      // Swapping models means dropping the old one first; two sets of weights
+      // resident at once is the fastest way to be jetsammed.
+      if let loadedModel, loadedModel.id != model.id { unload() }
       guard container == nil else { return }
 
       let configuration = ModelConfiguration(
-        id: MLXPolicy.allowedModel,
-        revision: MLXPolicy.allowedModelRevision
+        id: model.id,
+        revision: model.revision
       )
       // MLX Swift LM is provider-agnostic: it supplies no downloader and no
       // tokenizer, so both sides of the supply chain are ours to name.
       let loaded = try await loadModelContainer(
-        from: PinnedModelDownloader(),
+        from: PinnedModelDownloader(model: model),
         using: PinnedTokenizerLoader(),
         configuration: configuration,
         useLatest: false
@@ -59,6 +85,7 @@ import WriteCore
       }
 
       container = loaded
+      loadedModel = model
       session = ChatSession(
         loaded,
         instructions: MLXPolicy.systemInstructions,
@@ -102,6 +129,7 @@ import WriteCore
     func unload() {
       session = nil
       container = nil
+      loadedModel = nil
       MLX.GPU.clearCache()
     }
 

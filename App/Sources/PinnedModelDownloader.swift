@@ -20,9 +20,18 @@ import Foundation
 
     /// The revision, enumerated. A glob describes names; this describes
     /// content, which is the only thing worth checking.
-    static var manifest: [Entry] { MLXPolicy.model.files }
+    /// The model this instance serves. Held rather than read from policy so a
+    /// download and the verification that follows it cannot disagree about
+    /// which revision they are checking.
+    let model: PinnedModel
 
-    static var totalBytes: Int64 { manifest.reduce(Int64(0)) { $0 + $1.size } }
+    init(model: PinnedModel = MLXPolicy.model) {
+      self.model = model
+    }
+
+    var manifest: [Entry] { model.files }
+
+    var totalBytes: Int64 { manifest.reduce(Int64(0)) { $0 + $1.size } }
 
     /// What MLX asks for today. Checked rather than obeyed: if a future MLX
     /// asks for a different set, the manifest may no longer be the right answer
@@ -51,10 +60,10 @@ import Foundation
       guard Set(patterns) == Self.expectedPatterns else {
         throw PinnedDownloadError.unexpectedPatterns(patterns.sorted())
       }
-      guard id == MLXPolicy.allowedModel else {
+      guard id == model.id else {
         throw PinnedDownloadError.unexpectedModel(id)
       }
-      guard let revision, revision == MLXPolicy.allowedModelRevision else {
+      guard let revision, revision == model.revision else {
         throw PinnedDownloadError.unexpectedRevision(revision)
       }
       // A pinned immutable commit has no newer version to look for, so a caller
@@ -72,16 +81,16 @@ import Foundation
       // able to write, so it earns no more trust than the network does. This
       // does mean re-hashing ~2.3 GB on every load; that cost is the point, and
       // it is still far cheaper than the download it replaces.
-      if Self.isVerified(directory: root) {
-        progressHandler(Self.progress(completed: Self.totalBytes))
+      if self.isVerified(directory: root) {
+        progressHandler(self.progress(completed: totalBytes))
         return root
       }
 
       do {
         try? FileManager.default.removeItem(at: root)
-        try await Self.fetchAll(
+        try await self.fetchAll(
           into: root, id: id, revision: revision, progressHandler: progressHandler)
-        try Self.verify(directory: root)
+        try self.verify(directory: root)
       } catch {
         // Never leave a half-written or rejected tree behind: the next launch
         // would find it and have to decide all over again whether to trust it.
@@ -94,7 +103,7 @@ import Foundation
 
     // MARK: - Cache location
 
-    private static func cacheRoot(id: String, revision: String) throws -> URL {
+    static func cacheRoot(id: String, revision: String) throws -> URL {
       guard
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       else {
@@ -132,7 +141,7 @@ import Foundation
 
     // MARK: - Verification
 
-    private static func isVerified(directory root: URL) -> Bool {
+    private func isVerified(directory root: URL) -> Bool {
       do {
         try verify(directory: root)
         return true
@@ -143,7 +152,7 @@ import Foundation
 
     /// Checks the directory holds exactly the manifest: nothing missing,
     /// nothing extra, every size and digest as recorded.
-    private static func verify(directory root: URL) throws {
+    private func verify(directory root: URL) throws {
       let present = Set(try FileManager.default.contentsOfDirectory(atPath: root.path))
       let expected = Set(manifest.map(\.path))
       guard present == expected else {
@@ -152,7 +161,7 @@ import Foundation
           missing: expected.subtracting(present).sorted())
       }
       for entry in manifest {
-        try verify(entry: entry, at: try location(of: entry, under: root))
+        try Self.verify(entry: entry, at: try Self.location(of: entry, under: root))
       }
     }
 
@@ -208,7 +217,7 @@ import Foundation
 
     // MARK: - Fetching
 
-    private static func fetchAll(
+    private func fetchAll(
       into root: URL,
       id: String,
       revision: String,
@@ -235,8 +244,8 @@ import Foundation
 
       for entry in manifest {
         try await coordinator.fetch(
-          try fileURL(id: id, revision: revision, path: entry.path),
-          to: try location(of: entry, under: root),
+          try Self.fileURL(id: id, revision: revision, path: entry.path),
+          to: try Self.location(of: entry, under: root),
           session: session)
         coordinator.settle(bytes: entry.size)
       }
@@ -255,7 +264,7 @@ import Foundation
       return url
     }
 
-    fileprivate static func progress(completed: Int64) -> Progress {
+    fileprivate func progress(completed: Int64) -> Progress {
       let progress = Progress(totalUnitCount: totalBytes)
       progress.completedUnitCount = min(completed, totalBytes)
       return progress
