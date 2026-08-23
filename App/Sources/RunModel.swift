@@ -44,6 +44,11 @@ final class RunModel {
   var tokensThisRun = 0
   var tokensPerSecondLive: Double = 0
 
+  /// Link measurement to `host`, distinct from generation throughput.
+  var link: LinkResult?
+  var linkError: String?
+  var isTestingLink = false
+
   /// Measured speed of this device, once benchmarked.
   var benchmark: BenchmarkResult?
   var benchmarkError: String?
@@ -105,6 +110,20 @@ final class RunModel {
     } catch {
       benchmarkError = String(describing: error)
       phase = .idle
+    }
+  }
+
+  /// Measures the network link to the configured host.
+  func runLinkTest() async {
+    guard !isTestingLink else { return }
+    isTestingLink = true
+    linkError = nil
+    defer { isTestingLink = false }
+    do {
+      link = try await LinkTest.run(host: host)
+    } catch {
+      link = nil
+      linkError = (error as NSError).localizedDescription
     }
   }
 

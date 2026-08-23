@@ -42,6 +42,10 @@ struct FleetNode: Identifiable, Sendable {
   /// guess, and a wrong guess sends you looking at the wrong device — so keep
   /// what the network actually said.
   var failureDetail: String?
+  /// Link measurement, distinct from generation throughput. A node can be fast
+  /// at producing tokens and slow to reach.
+  var link: LinkResult?
+  var isTestingLink = false
 
   var isReachable: Bool {
     if case .reachable = state { return true }
@@ -275,6 +279,33 @@ final class FleetManager {
     } catch {
       nodes[index].tokensPerSecond = nil
       nodes[index].state = .unreachable("measure failed")
+    }
+  }
+
+  /// Measures the network link to one node.
+  func testLink(_ node: FleetNode) async {
+    guard let index = nodes.firstIndex(where: { $0.id == node.id }) else { return }
+    nodes[index].isTestingLink = true
+    defer { if let i = nodes.firstIndex(where: { $0.id == node.id }) { nodes[i].isTestingLink = false } }
+    do {
+      let result = try await LinkTest.run(host: node.host)
+      if let i = nodes.firstIndex(where: { $0.id == node.id }) {
+        nodes[i].link = result
+        nodes[i].failureDetail = nil
+      }
+    } catch {
+      if let i = nodes.firstIndex(where: { $0.id == node.id }) {
+        nodes[i].link = nil
+        nodes[i].failureDetail = "link test: \((error as NSError).localizedDescription)"
+      }
+    }
+  }
+
+  /// Sequentially, not concurrently: parallel transfers would contend for the
+  /// same uplink and each would report a fraction of the real bandwidth.
+  func testAllLinks() async {
+    for node in nodes where node.isReachable && node.aliasOf == nil {
+      await testLink(node)
     }
   }
 

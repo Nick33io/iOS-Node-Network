@@ -317,6 +317,41 @@ struct RootView: View {
         value: telemetry.bandwidthLabel,
         fraction: telemetry.bandwidthFraction
       )
+      // Passive bandwidth above is what this node is currently serving; the
+      // link test below is what the connection can actually carry. A quiet
+      // node reads 0 B/s on the first and may still have a fast link.
+      if let link = model.link {
+        Meter(
+          key: "link down",
+          value: String(format: "%.1f MB/s", link.downloadMBps),
+          // 12 MB/s tops a good Wi-Fi path here; a relayed one lands far below.
+          fraction: min(1, link.downloadMBps / 12)
+        )
+        Meter(
+          key: "link up",
+          value: String(format: "%.1f MB/s", link.uploadMBps),
+          fraction: min(1, link.uploadMBps / 12)
+        )
+        Row(key: "latency", value: "\(link.latencyMilliseconds) ms")
+      }
+      if let failure = model.linkError {
+        Text(failure)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.red)
+          .lineLimit(2)
+      }
+      HStack {
+        Text("to \(model.host)")
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.tertiary)
+        Spacer()
+        Button(model.isTestingLink ? "TESTING" : "LINK TEST") {
+          Task { await model.runLinkTest() }
+        }
+        .font(.system(.caption, design: .monospaced).weight(.semibold))
+        .disabled(model.isTestingLink)
+      }
+      .padding(.top, 2)
     }
   }
 

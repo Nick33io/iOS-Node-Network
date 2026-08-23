@@ -54,6 +54,7 @@ struct ManagerView: View {
                 node: node,
                 refresh: { Task { await fleet.refresh(node) } },
                 measure: { Task { await fleet.measure(node) } },
+                testLink: { Task { await fleet.testLink(node) } },
                 remove: { fleet.remove(node) }
               )
             }
@@ -95,6 +96,14 @@ struct ManagerView: View {
           } label: {
             Image(systemName: "speedometer")
           }
+          .accessibilityLabel("Measure throughput on every node")
+          .disabled(fleet.isRefreshing)
+          Button {
+            Task { await fleet.testAllLinks() }
+          } label: {
+            Image(systemName: "network")
+          }
+          .accessibilityLabel("Test the link to every node")
           .disabled(fleet.isRefreshing)
           Button {
             Task { await fleet.refreshAll() }
@@ -387,6 +396,7 @@ private struct NodeCard: View {
   let node: FleetNode
   let refresh: () -> Void
   let measure: () -> Void
+  let testLink: () -> Void
   let remove: () -> Void
 
   var body: some View {
@@ -438,6 +448,11 @@ private struct NodeCard: View {
       if let thermal = node.thermal { Field("thermal", thermal) }
       if let power = node.power { Field("power", power) }
       if let latency = node.probeMilliseconds { Field("probe", "\(latency) ms") }
+      if let link = node.link {
+        Field("link", link.summary)
+      } else if node.isTestingLink {
+        Field("link", "measuring…")
+      }
       if let detail = node.failureDetail {
         Text(detail)
           .font(.system(.caption2, design: .monospaced))
@@ -447,9 +462,10 @@ private struct NodeCard: View {
           .padding(.top, 2)
       }
 
-      HStack(spacing: 14) {
+      HStack(spacing: 12) {
         Button("REFRESH", action: refresh)
-        Button("MEASURE", action: measure).disabled(!node.isReachable)
+        Button("TOK/S", action: measure).disabled(!node.isReachable)
+        Button("LINK", action: testLink).disabled(!node.isReachable || node.isTestingLink)
         Spacer()
         Button(role: .destructive, action: remove) { Text("REMOVE") }
       }

@@ -152,6 +152,17 @@
       }
       sendRaw(status: "200 OK", body: data, on: connection)
 
+      case ("POST", "/echo"):
+        // Returns a payload of the requested size. Measuring a link needs
+        // bytes moving in both directions: a request that only uploads
+        // measures upstream, and a link is rarely symmetric.
+        let requested = (try? JSONSerialization.jsonObject(with: request.body))
+          .flatMap { ($0 as? [String: Any])?["bytes"] as? Int } ?? request.body.count
+        // Capped: this is a measurement tool, not a way to make a phone
+        // allocate whatever a caller asks for.
+        let size = min(max(0, requested), 4 << 20)
+        sendRaw(status: "200 OK", body: Data(repeating: 0x2E, count: size), on: connection)
+
     case ("GET", "/health"):
         send(json: describe(), status: "200 OK", on: connection)
 
