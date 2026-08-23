@@ -103,6 +103,9 @@
         // Reported so a manager can show used-against-installed rather than
         // installed alone, which says nothing about current pressure.
         "footprintGiB": Double(DeviceProfile.residentFootprintBytes()) / 1_073_741_824,
+        // Headroom before jetsam, asked of the OS. Installed RAM says what the
+        // hardware has; this says what this process is actually allowed.
+        "availableGiB": Double(DeviceProfile.availableMemoryBytes()) / 1_073_741_824,
           // Which WorkKinds this node will accept, matching MeshMessage.join.
           "kinds": ["section"],
         ],

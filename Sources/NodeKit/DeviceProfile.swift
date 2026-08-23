@@ -1,6 +1,7 @@
 #if canImport(Darwin)
   import Darwin
   import Foundation
+import os
 
   #if canImport(UIKit)
     import UIKit
@@ -55,6 +56,20 @@
     /// is the only memory number worth reporting from a device that can be
     /// killed for exceeding it. Installed RAM says what the hardware has; this
     /// says how close the process is to being terminated.
+    /// Bytes this process may still allocate before the system kills it.
+    ///
+    /// On iOS this is `os_proc_available_memory`, the real remaining headroom.
+    /// macOS has no equivalent jetsam ceiling for a normal process, so it
+    /// reports installed memory — the honest answer for a machine that pages
+    /// instead of being terminated.
+    public static func availableMemoryBytes() -> UInt64 {
+      #if os(iOS)
+        return UInt64(max(0, os_proc_available_memory()))
+      #else
+        return ProcessInfo.processInfo.physicalMemory
+      #endif
+    }
+
     public static func residentFootprintBytes() -> UInt64 {
       var info = task_vm_info_data_t()
       var count = mach_msg_type_number_t(

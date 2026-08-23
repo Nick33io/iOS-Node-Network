@@ -214,11 +214,18 @@ struct ManagerView: View {
       }
 
       HStack {
-        Text(MLXPolicy.allowedModel)
-          .font(.system(.caption2, design: .monospaced))
-          .foregroundStyle(.tertiary)
-          .lineLimit(1)
-          .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(MLXPolicy.allowedModel)
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+          if !MLXPolicy.hasIncreasedMemoryLimit {
+            Text("increased-memory-limit not granted — capped to a smaller model")
+              .font(.system(.caption2, design: .monospaced))
+              .foregroundStyle(.orange)
+          }
+        }
         Spacer()
         Button("MEASURE") {
           Task { await node.runBenchmark() }
@@ -448,6 +455,9 @@ private struct NodeCard: View {
           node.footprintGiB.map { String(format: "%.2f/%.0f GB", $0, memory) }
             ?? String(format: "%.0f GB", memory)
         )
+      }
+      if let headroom = node.availableGiB {
+        Field("headroom", String(format: "%.1f GB", headroom))
       }
       if let model = node.model { Field("model", model) }
       if let backend = node.backend { Field("backend", backend) }

@@ -61,6 +61,23 @@ struct PinnedModel: Sendable {
     ]
   )
 
+  /// 4.62 GB. For devices with both the headroom and the entitlement — an M4
+  /// iPad, not a phone. Captured from the Hugging Face tree on 2026-08-23.
+  static let qwen3_8B_4bit = PinnedModel(
+    id: "mlx-community/Qwen3-8B-4bit",
+    revision: "545dc4251c05440727734bcd94334791f6ab0192",
+    files: [
+      .init(path: "added_tokens.json", size: 707, digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
+      .init(path: "config.json", size: 939, digest: .gitBlob("6f2a32b76648381bea25bdc81fad0e7160f86ac5")),
+      .init(path: "model.safetensors", size: 4_607_835_174, digest: .sha256("f2d29621aab300336ad645567ff38c42aac755513006ef4e8a579cf7ef5256d8")),
+      .init(path: "model.safetensors.index.json", size: 64_065, digest: .gitBlob("4af62897c345f277e7b17aab48230d7ba119d87e")),
+      .init(path: "special_tokens_map.json", size: 613, digest: .gitBlob("ac23c0aaa2434523c494330aeb79c58395378103")),
+      .init(path: "tokenizer.json", size: 11_422_654, digest: .sha256("aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4")),
+      .init(path: "tokenizer_config.json", size: 9_706, digest: .gitBlob("7345216a0785dc7086e8c245b2a9d3896ce2b756")),
+      .init(path: "vocab.json", size: 2_776_833, digest: .gitBlob("4783fe10ac3adce15ac8f358ef5462739852c569")),
+    ]
+  )
+
   /// 2.3 GB. Better prose, but needs the increased-memory-limit entitlement on
   /// an 8 GB device. Carried over from the audited 33io plugin manifest.
   static let qwen3_4B_4bit = PinnedModel(

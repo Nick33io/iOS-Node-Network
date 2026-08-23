@@ -374,6 +374,9 @@ struct RootView: View {
       Row(key: "tokens", value: "\(model.tokensThisRun)")
       Row(key: "sections", value: "\(model.sections.count)")
       Row(key: "status", value: statusText, tint: statusTint)
+      if !MLXPolicy.hasIncreasedMemoryLimit {
+        Row(key: "mem entitlement", value: "not granted", tint: .orange)
+      }
 
       HStack(spacing: 14) {
         Button("BENCH") { Task { await model.runBenchmark() } }

@@ -24,6 +24,8 @@ struct FleetNode: Identifiable, Sendable {
   var memoryGiB: Double?
   /// Resident footprint on that node, when it reports one.
   var footprintGiB: Double?
+  /// Headroom before the OS kills that node's process.
+  var availableGiB: Double?
   var suitedToLongWork: Bool?
   /// Last measured throughput. Nil until this node has been benchmarked —
   /// deliberately not defaulted to zero, which would read as "measured and slow"
@@ -222,6 +224,7 @@ final class FleetManager {
       updated.suitedToLongWork = capabilities["suitedToLongWork"] as? Bool
       updated.memoryGiB = profile["memoryGiB"] as? Double
       updated.footprintGiB = capabilities["footprintGiB"] as? Double
+      updated.availableGiB = capabilities["availableGiB"] as? Double
       if let label = profile["label"] as? String, !label.isEmpty, label != "iPhone" {
         updated.label = label
       }

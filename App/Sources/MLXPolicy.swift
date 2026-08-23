@@ -1,4 +1,5 @@
 import Foundation
+import os
 import WriteCore
 
 /// The device-writer boundary, carried over verbatim from the audited
@@ -32,7 +33,41 @@ enum MLXPolicy {
   /// revision from its digests.
   static var model: PinnedModel {
     let installedGB = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
-    return installedGB >= 12 ? .qwen3_4B_4bit : .qwen3_1_7B_4bit
+    // The 8B only fits where the entitlement has actually been granted. Without
+    // it a 16 GB device is held near 6 GB, and 4.6 GB of weights plus KV cache
+    // is a jetsam kill rather than a slow load — so this checks what was
+    // granted instead of assuming it from the entitlements file, which can be
+    // present in the source and stripped at signing.
+    // Largest that actually fits, asked of the OS rather than assumed from
+    // installed RAM — the two differ by whatever the entitlement was granted.
+    if installedGB >= 12, canHost(.qwen3_8B_4bit) { return .qwen3_8B_4bit }
+    if canHost(.qwen3_4B_4bit) { return .qwen3_4B_4bit }
+    return .qwen3_1_7B_4bit
+  }
+
+  /// Bytes this process may still allocate before jetsam kills it.
+  ///
+  /// `os_proc_available_memory` reports the real remaining headroom, which is
+  /// strictly better than inferring it from the entitlement: an entitlement can
+  /// be declared in source and silently stripped at signing, and even when
+  /// granted the ceiling varies by device and by what else the system is doing.
+  /// Asking costs nothing and cannot be wrong.
+  static var availableMemoryBytes: Int { os_proc_available_memory() }
+
+  /// Whether this device can actually hold the given model plus working set.
+  ///
+  /// Doubles the weight size: KV cache, the tokenizer, and MLX's own arenas
+  /// roughly match the weights during generation, and a model that loads and
+  /// then dies on the first long prompt is worse than one that never loaded.
+  static func canHost(_ candidate: PinnedModel) -> Bool {
+    Int(candidate.totalBytes) * 2 < availableMemoryBytes
+  }
+
+  /// True when the process has meaningfully more headroom than an
+  /// unentitled app of this size would get.
+  static var hasIncreasedMemoryLimit: Bool {
+    let installed = Double(ProcessInfo.processInfo.physicalMemory)
+    return Double(availableMemoryBytes) > installed * 0.42
   }
 
   static var allowedModel: String { model.id }
