@@ -13,6 +13,10 @@ struct RootView: View {
   @State private var showingConsole = false
   @State private var ambient = AmbientDisplay()
   @State private var telemetry = NodeTelemetry()
+  @State private var models = ModelStore()
+  #if canImport(MLX) && !targetEnvironment(simulator)
+    @State private var mlx = MLXWriter()
+  #endif
   /// Whether the console shows instruments or the text produced so far.
   @State private var showingOutput = false
   #if canImport(AVFoundation) && !targetEnvironment(simulator)
@@ -55,6 +59,12 @@ struct RootView: View {
           instrumentHeader
           instrumentsSection
           taskSection
+          ModelsPanel(
+            models: models,
+            download: { entry in Task { await downloadModel(entry) } },
+            load: { entry in Task { await loadModel(entry) } },
+            unload: { unloadModel() }
+          )
           if showingOutput {
             outputSection
           }
@@ -155,6 +165,28 @@ struct RootView: View {
           }
         }
       }
+    #endif
+  }
+
+  private func downloadModel(_ entry: ModelStore.Entry) async {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      await models.download(entry, using: mlx)
+    #else
+      models.lastError = "MLX is unavailable in this build"
+    #endif
+  }
+
+  private func loadModel(_ entry: ModelStore.Entry) async {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      await models.load(entry, using: mlx)
+    #else
+      models.lastError = "MLX is unavailable in this build"
+    #endif
+  }
+
+  private func unloadModel() {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      models.unload(using: mlx)
     #endif
   }
 

@@ -32,25 +32,30 @@ enum MLXPolicy {
   /// The manifest travels with the model, so switching here cannot desync the
   /// revision from its digests.
   static var model: PinnedModel {
-    let installedGB = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
-    // The 8B only fits where the entitlement has actually been granted. Without
-    // it a 16 GB device is held near 6 GB, and 4.6 GB of weights plus KV cache
-    // is a jetsam kill rather than a slow load — so this checks what was
-    // granted instead of assuming it from the entitlements file, which can be
-    // present in the source and stripped at signing.
-    // Largest that actually fits, asked of the OS rather than assumed from
-    // installed RAM — the two differ by whatever the entitlement was granted.
-    // Tried at reduced context too, so a device that cannot host a model at
-    // 4096 still gets it at 2048 rather than dropping a whole size class.
-    let candidates: [PinnedModel] = [.qwen3_8B_4bit, .qwen3_4B_4bit]
-    for candidate in candidates
-    where installedGB >= 8 && canHost(candidate, context: affordableContext(for: candidate))
-      && affordableContext(for: candidate) >= 2048
-      && canHost(candidate, context: 2048)
-    {
-      return candidate
+    selection.model
+  }
+
+  /// The chosen model and the context it can afford, decided together.
+  ///
+  /// Deciding them separately was a bug: an earlier version asked
+  /// `affordableContext` for a candidate that did not fit at any context, got
+  /// the 2048 fallback back, and treated that as a fit. A phone selected the
+  /// 8B it had no room for and was killed on first load.
+  ///
+  /// Largest first, and the first pair that genuinely fits wins. Anything that
+  /// fits at no context is skipped entirely rather than falling back to a
+  /// context it also cannot afford.
+  static var selection: (model: PinnedModel, context: Int) {
+    let candidates: [PinnedModel] = [.qwen3_8B_4bit, .qwen3_4B_4bit, .qwen3_1_7B_4bit]
+    for candidate in candidates {
+      for context in [4096, 3072, 2048] where canHost(candidate, context: context) {
+        return (candidate, context)
+      }
     }
-    return .qwen3_1_7B_4bit
+    // Nothing fits with margin. The smallest model at the shortest context is
+    // the honest last resort — it may still be killed, but reporting a model
+    // this node cannot hold would be worse.
+    return (.qwen3_1_7B_4bit, 2048)
   }
 
   /// Bytes this process may still allocate before jetsam kills it.
@@ -71,20 +76,6 @@ enum MLXPolicy {
   static func canHost(_ candidate: PinnedModel, context: Int = 4096) -> Bool {
     Double(candidate.residentBytes(context: context)) * 1.15
       < Double(availableMemoryBytes)
-  }
-
-  /// The context this device can afford for a given model.
-  ///
-  /// Halving context halves the KV cache, which is the only part of the
-  /// working set that can be traded. On a device that cannot quite fit a model
-  /// at full context, a shorter one is the difference between running a larger
-  /// model and not running it — and the section loop already caps prompts well
-  /// below 4096, so the loss is mostly theoretical.
-  static func affordableContext(for candidate: PinnedModel) -> Int {
-    for context in [4096, 3072, 2048] where canHost(candidate, context: context) {
-      return context
-    }
-    return 2048
   }
 
   /// True when the process has meaningfully more headroom than an
@@ -123,7 +114,7 @@ enum MLXPolicy {
   /// fixed, so a node that had to shorten context reports that honestly to the
   /// fleet instead of advertising a window it cannot serve.
   static var limits: DeviceLimits {
-    let context = affordableContext(for: model)
+    let context = selection.context
     return DeviceLimits(
       maxContextTokens: context,
       maxInputCharacters: min(3072, context - 1024),
