@@ -27,8 +27,10 @@ enum KnownNodes {
     .init(label: "iPhone Air", host: "100.86.4.127", platform: "iOS"),
     .init(label: "Fold 8 Ultra", host: "100.103.128.56", platform: "Android"),
     .init(label: "Z Flip", host: "100.93.35.81", platform: "Android"),
+    // 33io-backend (100.114.110.90) removed: offline 93 days and superseded by
+    // backend-1. A dead address in the catalogue is worse than an absent one —
+    // it is offered as a one-tap add and then reports "offline" forever.
     .init(label: "33io backend 1", host: "100.67.145.126", platform: "macOS"),
-    .init(label: "33io backend", host: "100.114.110.90", platform: "macOS"),
   ]
 
   /// Resolves free text to a host.
