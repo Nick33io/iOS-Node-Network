@@ -38,6 +38,21 @@
     /// fleet whose speed is invisible to itself.
     public private(set) var lastTokensPerSecond: Double = 0
     public private(set) var tokensServed = 0
+    /// Requests currently generating. The reading that says whether a node is
+    /// idle or working — every other meter describes capacity, not use.
+    public private(set) var inFlight = 0
+    public private(set) var completed = 0
+    public private(set) var failed = 0
+    /// When this listener came up, for uptime.
+    public private(set) var servingSince: Date?
+
+    /// Snapshot for the profile payload.
+    public var load: NodeLoad {
+      NodeLoad(
+        inFlight: inFlight, completed: completed, failed: failed,
+        uptimeSeconds: servingSince.map { Int(-$0.timeIntervalSinceNow) } ?? 0
+      )
+    }
 
     private var listener: NWListener?
     private let makeWriter: @MainActor () async throws -> any DeviceWriter
@@ -83,7 +98,9 @@
         listener.stateUpdateHandler = { [weak self] state in
           Task { @MainActor in
             switch state {
-            case .ready: self?.isListening = true
+            case .ready:
+            self?.isListening = true
+            self?.servingSince = Date()
             case .failed(let error):
               self?.lastError = String(describing: error)
               self?.isListening = false
@@ -167,6 +184,8 @@
         send(json: describe(), status: "200 OK", on: connection)
 
       case ("POST", "/generate"):
+        inFlight += 1
+        defer { inFlight -= 1 }
         let generate: GenerateRequest
         do {
           generate = try GenerateRequest(body: request.body, limits: limits)

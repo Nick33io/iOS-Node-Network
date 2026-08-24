@@ -18,6 +18,7 @@ struct ManagerView: View {
   @State private var telemetry = NodeTelemetry()
   @State private var server: NodeServer?
   @State private var models = ModelStore()
+  @State private var screen = ScreenKeeper()
   #if canImport(MLX) && !targetEnvironment(simulator)
     @State private var writer = MLXWriter()
   #endif
@@ -59,6 +60,7 @@ struct ManagerView: View {
         .padding(20)
       }
       .background(Color.black)
+      .onTapGesture { screen.touched() }
       .navigationTitle("NOD3 · FLEET")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -124,7 +126,10 @@ struct ManagerView: View {
         // Serving unattended is the whole point of a docked tablet, and the
         // idle timer is what makes it possible. Pinning it here is also what
         // promotes this node to permanent while it is on power.
-        UIApplication.shared.isIdleTimerDisabled = true
+        // Holds the screen awake and dims it when idle. Serving with the
+        // screen off is not something iOS supports, so the cost is attacked
+        // rather than avoided.
+        screen.hold()
         await fleet.refreshAll()
         fleet.startAutoRefresh()
       }
@@ -283,7 +288,8 @@ struct ManagerView: View {
           limits: MLXPolicy.limits,
           // The idle timer is the app's own switch, so only the app can report
           // it — and it is half of what makes an iOS node permanent.
-          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
+          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled,
+          load: server?.load ?? .idle
         )
       }
     )
@@ -383,6 +389,11 @@ struct ManagerView: View {
       if let swept = fleet.lastSweep {
         Stat(key: "last sweep", value: swept.formatted(date: .omitted, time: .standard))
       }
+      Stat(
+        key: "screen",
+        value: screen.isDimmed ? "dimmed" : "lit",
+        tint: screen.isDimmed ? .secondary : .green
+      )
       Stat(
         key: "auto",
         value: fleet.autoRefresh ? "\(Int(fleet.refreshInterval))s" : "off",

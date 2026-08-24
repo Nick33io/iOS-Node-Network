@@ -14,6 +14,7 @@ struct RootView: View {
   @State private var ambient = AmbientDisplay()
   @State private var telemetry = NodeTelemetry()
   @State private var models = ModelStore()
+  @State private var screen = ScreenKeeper()
   #if canImport(MLX) && !targetEnvironment(simulator)
     @State private var mlx = MLXWriter()
   #endif
@@ -157,7 +158,7 @@ struct RootView: View {
         await camera.start()
         if camera.isRunning {
           // An ambient display that lets the screen lock stops being one.
-          UIApplication.shared.isIdleTimerDisabled = true
+          screen.hold()
           ensureServer().start()
           server?.provideGlyphs {
             guard camera.frame.columns > 0 else { return nil }
@@ -218,6 +219,9 @@ struct RootView: View {
             server?.stop()
           } else {
             ensureServer().start()
+            // A listener dies the moment iOS suspends the app, so serving and
+            // holding the screen are the same decision.
+            screen.hold()
           }
         }
         .font(.system(.caption, design: .monospaced).weight(.semibold))
@@ -241,7 +245,8 @@ struct RootView: View {
           limits: MLXPolicy.limits,
           // The idle timer is the app's own switch, so only the app can report
           // it — and it is half of what makes an iOS node permanent.
-          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
+          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled,
+          load: server?.load ?? .idle
         )
       }
     )

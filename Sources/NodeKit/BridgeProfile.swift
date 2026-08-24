@@ -19,6 +19,27 @@
   /// A Mac could run sshd and be modelled as an SSH bridge, but then it would be
   /// a different kind of fleet member from every phone. It emits this same shape
   /// so the controller has one node model, not two.
+  /// A node's current activity, as opposed to its capacity.
+  ///
+  /// Every other field in the profile describes what a node *could* do. These
+  /// say what it *is* doing, which is the reading a scheduler needs to avoid
+  /// piling work onto a node that is already busy.
+  public struct NodeLoad: Sendable {
+    public let inFlight: Int
+    public let completed: Int
+    public let failed: Int
+    public let uptimeSeconds: Int
+
+    public init(inFlight: Int, completed: Int, failed: Int, uptimeSeconds: Int) {
+      self.inFlight = inFlight
+      self.completed = completed
+      self.failed = failed
+      self.uptimeSeconds = uptimeSeconds
+    }
+
+    public static let idle = NodeLoad(inFlight: 0, completed: 0, failed: 0, uptimeSeconds: 0)
+  }
+
   public enum BridgeProfileEmitter {
     public static let schema = "33-shell-bridge-fleet/v1"
     public static let transport = "tailscale-http"
@@ -69,7 +90,8 @@
       limits: DeviceLimits,
       /// Whether the caller has pinned the screen awake. Only the app knows
       /// this, and it is half of what makes an iOS node permanent.
-      screenHeldAwake: Bool = false
+      screenHeldAwake: Bool = false,
+      load: NodeLoad = .idle
     ) -> [String: Any] {
       let profile = DeviceProfile.current()
       let tier = NodeTier.current(
@@ -123,6 +145,12 @@
         "availableGiB": Double(DeviceProfile.availableMemoryBytes()) / 1_073_741_824,
           // Which WorkKinds this node will accept, matching MeshMessage.join.
           "kinds": ["section"],
+        // Live use, not capacity. Everything else here says what a node could
+        // do; these say what it is doing.
+        "inFlight": load.inFlight,
+        "completed": load.completed,
+        "failed": load.failed,
+        "uptimeSeconds": load.uptimeSeconds,
         ],
       ]
     }
