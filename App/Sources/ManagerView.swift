@@ -114,6 +114,10 @@ struct ManagerView: View {
         // Serve by default: a manager that has to be told to contribute is a
         // manager that mostly does not.
         ensureServer().start()
+        // Serving unattended is the whole point of a docked tablet, and the
+        // idle timer is what makes it possible. Pinning it here is also what
+        // promotes this node to permanent while it is on power.
+        UIApplication.shared.isIdleTimerDisabled = true
         await fleet.refreshAll()
       }
       .sheet(isPresented: $showingAdd) { addSheet }
@@ -268,7 +272,10 @@ struct ManagerView: View {
           label: UIDevice.current.name,
           backend: node.backend.label,
           model: node.backend == .onDevice ? MLXPolicy.allowedModel : node.writerModel,
-          limits: MLXPolicy.limits
+          limits: MLXPolicy.limits,
+          // The idle timer is the app's own switch, so only the app can report
+          // it — and it is half of what makes an iOS node permanent.
+          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
         )
       }
     )

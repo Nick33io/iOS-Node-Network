@@ -206,7 +206,10 @@ struct RootView: View {
           label: UIDevice.current.name,
           backend: model.backend.label,
           model: model.backend == .onDevice ? MLXPolicy.allowedModel : model.writerModel,
-          limits: MLXPolicy.limits
+          limits: MLXPolicy.limits,
+          // The idle timer is the app's own switch, so only the app can report
+          // it — and it is half of what makes an iOS node permanent.
+          screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
         )
       }
     )

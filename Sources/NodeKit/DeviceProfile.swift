@@ -21,6 +21,15 @@ import os
     case battery(percent: Int)
     case mains
     case unknown
+
+    /// Drawing external power. `unknown` counts as false: a node should not
+    /// promote itself to permanent on an unread sensor.
+    public var isExternal: Bool {
+      switch self {
+      case .charging, .full, .mains: return true
+      case .battery, .unknown: return false
+      }
+    }
   }
 
   /// What this device can contribute to the mesh.

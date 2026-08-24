@@ -95,6 +95,24 @@ import WriteCore
 
     var isLoaded: Bool { container != nil }
 
+    /// Whether the weights are already on disk.
+    ///
+    /// Checked before generating so a request never silently turns into a
+    /// multi-gigabyte download. A caller waiting on /generate has no way to see
+    /// that progress, times out, and retries — which starts the download again.
+    nonisolated static func isDownloaded(_ model: PinnedModel) -> Bool {
+      guard let root = try? PinnedModelDownloader.cacheRoot(
+        id: model.id, revision: model.revision),
+        let walker = FileManager.default.enumerator(
+          at: root, includingPropertiesForKeys: [.fileSizeKey])
+      else { return false }
+      var total: Int64 = 0
+      for case let url as URL in walker {
+        total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+      }
+      return total >= model.totalBytes
+    }
+
     nonisolated func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
       try await MainActor.run { try self.validate(prompt: prompt) }
       return try await respond(prompt: prompt, maxOutputTokens: maxOutputTokens)
@@ -159,6 +177,7 @@ struct MLXWriterUnavailable: DeviceWriter {
 
 enum MLXWriterError: Error, CustomStringConvertible {
   case notLoaded
+  case notDownloaded(String)
   case promptOverLimit(characters: Int, limit: Int)
   case unavailable(String)
 
@@ -166,6 +185,8 @@ enum MLXWriterError: Error, CustomStringConvertible {
     switch self {
     case .notLoaded:
       return "The on-device model is not loaded."
+    case .notDownloaded(let model):
+      return "\(model) is not downloaded on this node. Fetch it from the MODELS panel before dispatching work."
     case .promptOverLimit(let characters, let limit):
       return "Prompt of \(characters) characters exceeds the device limit of \(limit)."
     case .unavailable(let reason):

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 import NodeKit
 
 /// One node as the manager currently understands it.
@@ -214,7 +215,10 @@ final class FleetManager {
       updated.thermal = profile.thermalLabel
       updated.power = profile.powerLabel
       updated.suitedToLongWork = profile.suitedToLongWork
-      updated.tier = NodeTier.current
+      updated.tier = NodeTier.current(
+        onMains: profile.power.isExternal,
+        screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
+      )
       updated.state = .reachable
       updated.probeMilliseconds = 0
       updated.failureDetail = nil

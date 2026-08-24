@@ -3,12 +3,18 @@
 
   /// What a node can be relied on for.
   ///
-  /// Derived from the platform, never configured. Whether a node can serve
-  /// while nobody is looking at it is a fact about the operating system, not a
-  /// preference: macOS keeps a process running indefinitely, iOS suspends a
-  /// backgrounded app within seconds and the listener dies with it. Letting an
-  /// owner declare an iPhone "permanent" would only move the disappointment
-  /// into the scheduler.
+  /// Derived from measurable conditions, never configured. The first version
+  /// keyed this off the platform alone, which was too blunt: an M4 iPad on a
+  /// stand, plugged in, with the screen pinned awake is genuinely always
+  /// available, and calling it "burst" wasted the second most capable machine
+  /// in the fleet.
+  ///
+  /// What actually distinguishes the tiers is whether a node can keep serving
+  /// unattended. macOS always can. An iOS device can while it holds power and
+  /// has disabled the idle timer — both facts the device can check — and
+  /// cannot once either lapses. Reading the conditions means a device promotes
+  /// itself when it is docked and demotes itself when unplugged, without
+  /// anyone maintaining a list.
   public enum NodeTier: String, Codable, Sendable, CaseIterable {
     /// Serves unattended. Safe to hand long or dependent work.
     case permanent
@@ -16,11 +22,20 @@
     /// vanish mid-task without warning.
     case burst
 
-    public static var current: NodeTier {
+    /// - Parameters:
+    ///   - onMains: drawing external power rather than battery.
+    ///   - screenHeldAwake: the app has disabled the idle timer, so the device
+    ///     will not lock and suspend it.
+    public static func current(onMains: Bool = false, screenHeldAwake: Bool = false)
+      -> NodeTier
+    {
       #if os(macOS)
         return .permanent
       #else
-        return .burst
+        // Both conditions, not either. Power without a held screen still locks
+        // and suspends; a held screen on battery still dies when the battery
+        // does.
+        return onMains && screenHeldAwake ? .permanent : .burst
       #endif
     }
 
@@ -47,6 +62,19 @@
       case .permanent: return 24
       case .burst: return 6
       }
+    }
+
+    /// Whether this tier was earned by conditions that can lapse.
+    ///
+    /// A docked iPad is permanent right now, but unplugging it changes that in
+    /// a way unplugging a Mac does not. Worth surfacing so the distinction is
+    /// visible rather than implied.
+    public static func isConditional() -> Bool {
+      #if os(macOS)
+        return false
+      #else
+        return true
+      #endif
     }
   }
 #endif

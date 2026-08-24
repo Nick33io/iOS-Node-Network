@@ -66,9 +66,16 @@
       label: String,
       backend: String,
       model: String,
-      limits: DeviceLimits
+      limits: DeviceLimits,
+      /// Whether the caller has pinned the screen awake. Only the app knows
+      /// this, and it is half of what makes an iOS node permanent.
+      screenHeldAwake: Bool = false
     ) -> [String: Any] {
       let profile = DeviceProfile.current()
+      let tier = NodeTier.current(
+        onMains: profile.power.isExternal,
+        screenHeldAwake: screenHeldAwake
+      )
       return [
         "schema": schema,
         "profile": [
@@ -102,9 +109,12 @@
           "hardware": profile.identifier,
         // Derived from the platform, so a fleet cannot be told a phone is
         // permanent. See NodeTier.
-        "tier": NodeTier.current.rawValue,
-        "leaseTicks": NodeTier.current.leaseTicks,
-        "takesDependedUponWork": NodeTier.current.takesDependedUponWork,
+        "tier": tier.rawValue,
+        "leaseTicks": tier.leaseTicks,
+        "takesDependedUponWork": tier.takesDependedUponWork,
+        // True where the tier rests on conditions that can lapse — a docked
+        // iPad is permanent until it is unplugged, a Mac simply is.
+        "tierIsConditional": NodeTier.isConditional(),
         // Reported so a manager can show used-against-installed rather than
         // installed alone, which says nothing about current pressure.
         "footprintGiB": Double(DeviceProfile.residentFootprintBytes()) / 1_073_741_824,
