@@ -102,6 +102,13 @@ struct ManagerView: View {
           .accessibilityLabel("Test the link to every node")
           .disabled(fleet.isRefreshing)
           Button {
+            fleet.autoRefresh.toggle()
+            if fleet.autoRefresh { fleet.startAutoRefresh() } else { fleet.stopAutoRefresh() }
+          } label: {
+            Image(systemName: fleet.autoRefresh ? "repeat.circle.fill" : "repeat.circle")
+          }
+          .accessibilityLabel(fleet.autoRefresh ? "Turn off auto refresh" : "Turn on auto refresh")
+          Button {
             Task { await fleet.refreshAll() }
           } label: {
             Image(systemName: "arrow.clockwise")
@@ -119,6 +126,7 @@ struct ManagerView: View {
         // promotes this node to permanent while it is on power.
         UIApplication.shared.isIdleTimerDisabled = true
         await fleet.refreshAll()
+        fleet.startAutoRefresh()
       }
       .sheet(isPresented: $showingAdd) { addSheet }
     }
@@ -375,6 +383,11 @@ struct ManagerView: View {
       if let swept = fleet.lastSweep {
         Stat(key: "last sweep", value: swept.formatted(date: .omitted, time: .standard))
       }
+      Stat(
+        key: "auto",
+        value: fleet.autoRefresh ? "\(Int(fleet.refreshInterval))s" : "off",
+        tint: fleet.autoRefresh ? .green : .secondary
+      )
       if currentFrame.columns > 0 {
         Stat(
           key: "ambient",

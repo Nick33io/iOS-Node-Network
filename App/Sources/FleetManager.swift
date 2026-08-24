@@ -76,6 +76,48 @@ final class FleetManager {
   var nodes: [FleetNode] = []
   var isRefreshing = false
   var lastSweep: Date?
+  var autoRefresh = true
+
+  private var sweepTask: Task<Void, Never>?
+
+  /// Seconds between sweeps, chosen by what the device can afford.
+  ///
+  /// The cost of polling is not the bytes — a sweep is a few kilobytes. It is
+  /// the radio tail: after any transmission the interface stays in a
+  /// high-power state for seconds before idling, so frequent polling means it
+  /// never idles at all. On mains that is free; on battery it is the single
+  /// most expensive thing this app does while otherwise sitting still.
+  ///
+  /// Never below the probe timeout either, or a sweep over a relayed path
+  /// would still be running when the next one starts.
+  var refreshInterval: TimeInterval {
+    DeviceProfile.current().power.isExternal ? 15 : 90
+  }
+
+  /// Begins periodic sweeps. Safe to call repeatedly.
+  func startAutoRefresh() {
+    guard sweepTask == nil else { return }
+    sweepTask = Task { [weak self] in
+      while !Task.isCancelled {
+        guard let self else { return }
+        let interval = await self.refreshInterval
+        try? await Task.sleep(for: .seconds(interval))
+        guard !Task.isCancelled else { return }
+        // Skip rather than queue: a sweep still running means the network is
+        // slow, and stacking another one on top only makes it slower.
+        let busy = await self.isRefreshing
+        let wanted = await self.autoRefresh
+        if wanted && !busy {
+          await self.refreshAll()
+        }
+      }
+    }
+  }
+
+  func stopAutoRefresh() {
+    sweepTask?.cancel()
+    sweepTask = nil
+  }
 
   private static let rosterKey = "fleet.roster.v1"
 
