@@ -28,6 +28,9 @@ struct Node: Sendable {
   var maxOutputTokens = 512
   var wordBudget = 340
   var reachable = false
+  /// Permanent nodes serve unattended; burst nodes only while foregrounded.
+  var tier = "burst"
+  var takesDependedUponWork = false
   /// Identifies the machine behind the address. Two roster entries can resolve
   /// to the same host — a stale address, a routing quirk, an alias — and
   /// dispatching to both would double-book one device while reporting it as
@@ -89,6 +92,8 @@ func survey() async -> [Node] {
         node.model = capabilities["model"] as? String ?? ""
         node.backend = capabilities["backend"] as? String ?? ""
         node.suitedToLongWork = capabilities["suitedToLongWork"] as? Bool ?? true
+        node.tier = capabilities["tier"] as? String ?? "burst"
+        node.takesDependedUponWork = capabilities["takesDependedUponWork"] as? Bool ?? false
         node.maxInputCharacters = capabilities["maxInputCharacters"] as? Int ?? 3072
         node.maxOutputTokens = capabilities["maxOutputTokens"] as? Int ?? 512
         node.wordBudget = capabilities["wordBudgetPerSection"] as? Int ?? 340
@@ -142,7 +147,8 @@ for node in nodes where node.reachable {
 for node in nodes {
   let detail =
     node.reachable
-    ? "\(node.hardware) · \(node.model)\(node.suitedToLongWork ? "" : " · short leases")" : "—"
+    ? "[\(node.tier)] \(node.hardware) · \(node.model)\(node.suitedToLongWork ? "" : " · short leases")"
+    : "—"
   print("  " + node.label.padded(20) + node.host.padded(18) + detail)
 }
 guard !workers.isEmpty else {
@@ -152,7 +158,9 @@ guard !workers.isEmpty else {
 if !aliases.isEmpty {
   print("\n  ignoring \(aliases.joined(separator: ", ")) — same machine as another entry")
 }
-print("\n\(workers.count) distinct node(s) available\n")
+let permanent = workers.filter { $0.tier == "permanent" }
+let burst = workers.filter { $0.tier != "permanent" }
+print("\n\(permanent.count) permanent, \(burst.count) burst\n")
 
 // Plan on the fleet's own planner. The brief is sealed first: the planner sees
 // placeholders and labels, never a real name or figure.
@@ -197,8 +205,14 @@ struct Outcome: Sendable {
 
 let started = Date()
 let outcomes = await withTaskGroup(of: Outcome?.self) { group -> [Outcome] in
+  // Burst nodes take leaf sections first: they are the work that costs one
+  // retry if a phone is suspended mid-task. Permanent nodes are kept for the
+  // assemble step and for whatever burst capacity does not cover, because a
+  // node that vanishes holding depended-upon work costs the whole document.
+  let ordered = burst + permanent
   for (index, spec) in plan.sections.enumerated() {
-    let node = workers[index % workers.count]
+    let node = ordered.isEmpty ? workers[index % workers.count]
+      : ordered[index % ordered.count]
     group.addTask {
       // Rehydrated on this machine, never in the cloud: real values enter at
       // the last possible moment.

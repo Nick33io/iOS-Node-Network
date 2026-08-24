@@ -100,6 +100,11 @@
           "power": profile.powerLabel,
           "suitedToLongWork": profile.suitedToLongWork,
           "hardware": profile.identifier,
+        // Derived from the platform, so a fleet cannot be told a phone is
+        // permanent. See NodeTier.
+        "tier": NodeTier.current.rawValue,
+        "leaseTicks": NodeTier.current.leaseTicks,
+        "takesDependedUponWork": NodeTier.current.takesDependedUponWork,
         // Reported so a manager can show used-against-installed rather than
         // installed alone, which says nothing about current pressure.
         "footprintGiB": Double(DeviceProfile.residentFootprintBytes()) / 1_073_741_824,

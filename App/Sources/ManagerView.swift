@@ -53,17 +53,8 @@ struct ManagerView: View {
           summary
           selfNodePanel
           modelsPanel
-          LazyVGrid(columns: columns, spacing: 16) {
-            ForEach(fleet.nodes) { node in
-              NodeCard(
-                node: node,
-                refresh: { Task { await fleet.refresh(node) } },
-                measure: { Task { await fleet.measure(node) } },
-                testLink: { Task { await fleet.testLink(node) } },
-                remove: { fleet.remove(node) }
-              )
-            }
-          }
+          tierSection(.permanent, caption: "always available")
+          tierSection(.burst, caption: "join when available")
         }
         .padding(20)
       }
@@ -354,12 +345,55 @@ struct ManagerView: View {
     #endif
   }
 
+  /// One tier's nodes.
+  ///
+  /// Split rather than mixed because the two behave differently enough that a
+  /// single list misleads: an offline permanent node is a fault, an offline
+  /// burst node is just a phone in someone's pocket.
+  @ViewBuilder
+  private func tierSection(_ tier: NodeTier, caption: String) -> some View {
+    let members = fleet.nodes(in: tier)
+    if !members.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 10) {
+          Text(tier.label.uppercased())
+            .font(.system(.caption, design: .monospaced).weight(.semibold))
+            .foregroundStyle(tier == .permanent ? .green : .yellow)
+            .tracking(2)
+          Text(caption)
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.tertiary)
+          Spacer()
+          Text("\(members.filter(\.isReachable).count)/\(members.count) up")
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.secondary)
+        }
+        LazyVGrid(columns: columns, spacing: 16) {
+          ForEach(members) { node in
+            NodeCard(
+              node: node,
+              refresh: { Task { await fleet.refresh(node) } },
+              measure: { Task { await fleet.measure(node) } },
+              testLink: { Task { await fleet.testLink(node) } },
+              remove: { fleet.remove(node) }
+            )
+          }
+        }
+      }
+    }
+  }
+
   private var summary: some View {
     HStack(spacing: 28) {
       Stat(
-        key: "nodes up",
-        value: "\(fleet.reachableCount)/\(fleet.nodes.count)",
-        tint: fleet.reachableCount > 0 ? .green : .red
+        key: "permanent",
+        value: "\(fleet.permanentUp)",
+        tint: fleet.permanentUp > 0 ? .green : .red
+      )
+      Stat(
+        key: "burst",
+        value: "\(fleet.burstUp)",
+        tint: fleet.burstUp > 0 ? .yellow : .secondary
       )
       Stat(
         key: "fleet throughput",
@@ -533,6 +567,7 @@ private struct NodeCard: View {
       if let headroom = node.availableGiB {
         Field("headroom", String(format: "%.1f GB", headroom))
       }
+      if let tier = node.tier { Field("tier", tier.label) }
       if let model = node.model { Field("model", model) }
       if let backend = node.backend { Field("backend", backend) }
       if let thermal = node.thermal { Field("thermal", thermal) }

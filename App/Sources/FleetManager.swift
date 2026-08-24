@@ -26,6 +26,8 @@ struct FleetNode: Identifiable, Sendable {
   var footprintGiB: Double?
   /// Headroom before the OS kills that node's process.
   var availableGiB: Double?
+  /// Permanent or burst. Reported by the node, not chosen here.
+  var tier: NodeTier?
   var suitedToLongWork: Bool?
   /// Last measured throughput. Nil until this node has been benchmarked —
   /// deliberately not defaulted to zero, which would read as "measured and slow"
@@ -225,6 +227,7 @@ final class FleetManager {
       updated.memoryGiB = profile["memoryGiB"] as? Double
       updated.footprintGiB = capabilities["footprintGiB"] as? Double
       updated.availableGiB = capabilities["availableGiB"] as? Double
+      updated.tier = (capabilities["tier"] as? String).flatMap(NodeTier.init(rawValue:))
       if let label = profile["label"] as? String, !label.isEmpty, label != "iPhone" {
         updated.label = label
       }
@@ -331,4 +334,18 @@ final class FleetManager {
   /// whole point of the fleet view is knowing how much hardware is actually
   /// available.
   var reachableCount: Int { nodes.filter { $0.isReachable && $0.aliasOf == nil }.count }
+
+  /// Grouped for display and for scheduling.
+  ///
+  /// A node whose tier is unknown is grouped with burst: assuming a node is
+  /// permanent when it might not be is the expensive direction of the mistake.
+  func nodes(in tier: NodeTier) -> [FleetNode] {
+    nodes.filter { node in
+      guard node.aliasOf == nil else { return false }
+      return (node.tier ?? .burst) == tier
+    }
+  }
+
+  var permanentUp: Int { nodes(in: .permanent).filter(\.isReachable).count }
+  var burstUp: Int { nodes(in: .burst).filter(\.isReachable).count }
 }
