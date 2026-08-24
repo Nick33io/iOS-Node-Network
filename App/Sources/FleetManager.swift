@@ -28,6 +28,8 @@ struct FleetNode: Identifiable, Sendable {
   var availableGiB: Double?
   /// Permanent or burst. Reported by the node, not chosen here.
   var tier: NodeTier?
+  /// True when this entry is the device doing the watching.
+  var isSelf = false
   var suitedToLongWork: Bool?
   /// Last measured throughput. Nil until this node has been benchmarked —
   /// deliberately not defaulted to zero, which would read as "measured and slow"
@@ -188,9 +190,36 @@ final class FleetManager {
     markAliases()
   }
 
+  /// This device's own addresses, so its card is not answered over the network.
+  ///
+  /// A node routing a request to its own tailnet address is at best a wasted
+  /// round trip and at worst refused outright — iOS does not reliably loop a
+  /// device's own Tailscale address back to itself. It knows its own state; it
+  /// should not have to ask.
+  private static var localHosts: Set<String> {
+    Set(NetworkAddresses.current().map(\.address))
+  }
+
   private static func probe(_ node: FleetNode) async -> FleetNode {
     var updated = node
     updated.lastProbe = Date()
+
+    if localHosts.contains(node.host) {
+      updated.isSelf = true
+      let profile = DeviceProfile.current()
+      updated.hardware = profile.identifier
+      updated.memoryGiB = profile.memoryGB
+      updated.footprintGiB = Double(DeviceProfile.residentFootprintBytes()) / 1_073_741_824
+      updated.availableGiB = Double(DeviceProfile.availableMemoryBytes()) / 1_073_741_824
+      updated.thermal = profile.thermalLabel
+      updated.power = profile.powerLabel
+      updated.suitedToLongWork = profile.suitedToLongWork
+      updated.tier = NodeTier.current
+      updated.state = .reachable
+      updated.probeMilliseconds = 0
+      updated.failureDetail = nil
+      return updated
+    }
     guard let url = URL(string: "http://\(node.host):8833/health") else {
       updated.state = .unreachable("bad address")
       return updated

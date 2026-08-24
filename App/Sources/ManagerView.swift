@@ -617,6 +617,7 @@ private struct NodeCard: View {
   }
 
   private var statusText: String {
+    if node.isSelf { return "this device" }
     if let owner = node.aliasOf { return "same as \(owner)" }
     switch node.state {
     case .reachable: return "up"
