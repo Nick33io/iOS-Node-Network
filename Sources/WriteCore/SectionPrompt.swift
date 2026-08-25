@@ -27,6 +27,11 @@ public struct SectionPromptBuilder: Sendable {
     Do not restate the heading, do not add a preamble, and do not write any
     other section. Use every required detail exactly as given; never invent
     names, figures, or dates that are not supplied.
+
+    The labelled lines below are instructions to you, not material to reproduce.
+    Do not copy the COVER or MUST APPEAR VERBATIM lists into your answer as a
+    list, do not state the word count, and do not emit any section marker. Emit
+    prose paragraphs and nothing else.
     """
 
   /// - Parameters:

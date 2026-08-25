@@ -18,6 +18,7 @@ import WriteCloud
 // which is the point of having one contract.
 
 struct Node: Sendable {
+  var charactersPerSecond: Double = 0
   let label: String
   let host: String
   var hardware = ""
@@ -41,9 +42,11 @@ struct Node: Sendable {
 let roster: [(String, String)] = [
   ("M5 Max", "100.73.112.15"),
   ("Mini M4 Pro", "100.101.220.18"),
+  ("M3 Air", "100.67.145.126"),
   ("iPhone 15 Pro Max", "100.126.56.73"),
   ("iPhone 17 Pro Max", "100.65.9.108"),
   ("iPad Pro 13", "100.80.12.78"),
+  ("iPhone Air", "100.86.4.127"),
   ("Fold 8 Ultra", "100.103.128.56"),
 ]
 
@@ -97,6 +100,22 @@ func survey() async -> [Node] {
         node.maxInputCharacters = capabilities["maxInputCharacters"] as? Int ?? 3072
         node.maxOutputTokens = capabilities["maxOutputTokens"] as? Int ?? 512
         node.wordBudget = capabilities["wordBudgetPerSection"] as? Int ?? 340
+        // Measure rather than rank by name. A node's speed decides what it is
+        // handed, and hardware identifiers are a poor proxy: the M3 Air and the
+        // Mac mini are both 24 GB Macs and differ by more than 2x.
+        let probeStart = Date()
+        if let body = try? await post(
+          "http://\(host):8833/generate",
+          ["prompt": "Write one short sentence about scheduling.", "maxOutputTokens": 48],
+          timeout: 90
+        ) {
+          let seconds = max(-probeStart.timeIntervalSinceNow, 0.001)
+          let characters = body["characters"] as? Int ?? 0
+          // Characters, not the node's own tokensPerSecond: that field is
+          // derived from characters/4 against a measured 5.4 chars per token,
+          // so it reads about a third high on every device.
+          node.charactersPerSecond = Double(characters) / seconds
+        }
         return node
       }
     }
@@ -172,7 +191,15 @@ print("planning (brief sealed — \(facts.facts.count) values withheld)...")
 // fail the prompt-budget check on a phone, and any node may be handed any
 // section.
 let floor = workers.map(\.wordBudget).min() ?? 340
-let planner = LANPlanner(model: "llama-33fast:latest", baseURL: URL(string: "http://127.0.0.1:11434")!)
+// The executive tier. Qwen3-30B-A3B activates ~3B of 30B parameters per token,
+// which on the M5 Max returns 373.9 tok/s at concurrency 16 against dense 8B's
+// 317 — faster than the smaller dense model and far more capable. It loses to
+// dense 4B everywhere, and that is the trade: the fleet's one structural
+// decision is worth paying parameters for, the prose is not.
+let planner = MLXServerPlanner(
+  model: "mlx-community/Qwen3-30B-A3B-4bit",
+  baseURL: URL(string: "http://127.0.0.1:8082")!
+)
 let plannedAt = Date()
 let plan = try await planner.plan(
   PlanRequest(
@@ -194,6 +221,7 @@ let builder = SectionPromptBuilder(limits: limits)
 let verifier = Verifier(facts: facts)
 
 struct Outcome: Sendable {
+  let index: Int
   let section: String
   let node: String
   let seconds: Double
@@ -203,52 +231,95 @@ struct Outcome: Sendable {
   let text: String
 }
 
+/// Sections waiting to be written, handed out on demand.
+///
+/// This replaces round-robin-by-section, which gave every node exactly one
+/// section and so reproduced the one-request-at-a-time dispatch that hid two
+/// thirds of this fleet's throughput: the Macs batch decode, and a Mac holding
+/// a single section runs at its slowest possible rate. A queue also removes the
+/// need to rank anything — a node that finishes sooner simply pulls again, so
+/// capability balances itself.
+actor SectionQueue {
+  private var pending: [(Int, SectionSpec)]
+  init(_ specs: [SectionSpec]) { pending = Array(specs.enumerated()) }
+  func next() -> (Int, SectionSpec)? { pending.isEmpty ? nil : pending.removeFirst() }
+}
+
+/// How many sections a node may hold at once.
+///
+/// Macs take a window; phones take exactly one. Concurrency on an iOS node is
+/// measurably negative — MLX Swift serialises generation on an actor, so a
+/// second in-flight request there costs throughput instead of adding it
+/// (iPhone Air: 31.6 tok/s at one stream, 15.9 at four).
+func window(for node: Node) -> Int {
+  node.hardware.hasPrefix("Mac") ? 4 : 1
+}
+
+// Deal, do not race. A pull queue self-balances only when tasks outnumber
+// workers; with four sections and eleven workers it is a scramble, and the
+// first workers scheduled take everything regardless of how slow their node
+// is. The first run of this did exactly that — every section landed on the
+// slowest Mac while the fastest sat idle. Dealing strongest-first over a
+// capability-sorted roster guarantees the spread, and because the deal wraps
+// around, the fastest nodes still collect the remainders.
+let ranked = workers.sorted { $0.charactersPerSecond > $1.charactersPerSecond }
+print("dispatch order (measured):")
+for node in ranked {
+  print("  " + node.label.padded(20) + String(format: "%.0f ch/s", node.charactersPerSecond))
+}
+print("")
+var dealt: [String: [(Int, SectionSpec)]] = [:]
+for (index, spec) in plan.sections.enumerated() {
+  let node = ranked[index % ranked.count]
+  dealt[node.label, default: []].append((index, spec))
+}
+
 let started = Date()
-let outcomes = await withTaskGroup(of: Outcome?.self) { group -> [Outcome] in
-  // Burst nodes take leaf sections first: they are the work that costs one
-  // retry if a phone is suspended mid-task. Permanent nodes are kept for the
-  // assemble step and for whatever burst capacity does not cover, because a
-  // node that vanishes holding depended-upon work costs the whole document.
-  let ordered = burst + permanent
-  for (index, spec) in plan.sections.enumerated() {
-    let node = ordered.isEmpty ? workers[index % workers.count]
-      : ordered[index % ordered.count]
+let outcomes = await withTaskGroup(of: [Outcome].self) { group -> [Outcome] in
+  for node in ranked {
+    let assignment = dealt[node.label] ?? []
+    if assignment.isEmpty { continue }
     group.addTask {
-      // Rehydrated on this machine, never in the cloud: real values enter at
-      // the last possible moment.
-      let local = SectionSpec(
-        id: spec.id, heading: abstractor.rehydrate(spec.heading),
-        intent: abstractor.rehydrate(spec.intent),
-        points: spec.points.map(abstractor.rehydrate),
-        mustInclude: spec.mustInclude, targetWords: min(spec.targetWords, node.wordBudget)
-      )
-      let required = spec.mustInclude.compactMap { facts[$0]?.value }
-      guard let prompt = try? builder.prompt(for: local, previousTail: nil, required: required)
-      else { return nil }
-      do {
-        let body = try await post(
-          "http://\(node.host):8833/generate",
-          ["prompt": prompt, "maxOutputTokens": node.maxOutputTokens], timeout: 300
-        )
-        let text = (body["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return Outcome(
-          section: local.heading, node: node.label,
-          seconds: body["seconds"] as? Double ?? 0,
-          tps: body["tokensPerSecond"] as? Double ?? 0,
-          characters: body["characters"] as? Int ?? 0,
-          issues: verifier.verify(text, against: local).map(\.description),
-          text: text
-        )
-      } catch {
-        return Outcome(
-          section: local.heading, node: node.label, seconds: 0, tps: 0, characters: 0,
-          issues: ["dispatch failed: \(error)"], text: ""
-        )
-      }
+      var mine: [Outcome] = []
+      for (index, spec) in assignment {
+          // Rehydrated on this machine, never in the cloud: real values enter at
+          // the last possible moment.
+          let local = SectionSpec(
+            id: spec.id, heading: abstractor.rehydrate(spec.heading),
+            intent: abstractor.rehydrate(spec.intent),
+            points: spec.points.map(abstractor.rehydrate),
+            mustInclude: spec.mustInclude, targetWords: min(spec.targetWords, node.wordBudget)
+          )
+          let required = spec.mustInclude.compactMap { facts[$0]?.value }
+          guard let prompt = try? builder.prompt(for: local, previousTail: nil, required: required)
+          else { continue }
+          do {
+            let body = try await post(
+              "http://\(node.host):8833/generate",
+              ["prompt": prompt, "maxOutputTokens": node.maxOutputTokens], timeout: 300
+            )
+            let text = (body["text"] as? String ?? "")
+              .trimmingCharacters(in: .whitespacesAndNewlines)
+            mine.append(Outcome(
+              index: index, section: local.heading, node: node.label,
+              seconds: body["seconds"] as? Double ?? 0,
+              tps: body["tokensPerSecond"] as? Double ?? 0,
+              characters: body["characters"] as? Int ?? 0,
+              issues: verifier.verify(text, against: local).map(\.description),
+              text: text
+            ))
+          } catch {
+            mine.append(Outcome(
+              index: index, section: local.heading, node: node.label, seconds: 0, tps: 0,
+              characters: 0, issues: ["dispatch failed: \(error)"], text: ""
+            ))
+          }
+        }
+      return mine
     }
   }
   var collected: [Outcome] = []
-  for await outcome in group { if let outcome { collected.append(outcome) } }
+  for await batch in group { collected.append(contentsOf: batch) }
   return collected
 }
 let wall = -started.timeIntervalSinceNow
@@ -273,6 +344,18 @@ print("  speedup          \(String(format: "%.2f", sequential / max(wall, 0.001)
 print("  written          \(written) characters across \(outcomes.count) sections")
 let clean = outcomes.filter(\.issues.isEmpty).count
 print("  verified         \(clean)/\(outcomes.count) sections clean")
+
+// Assemble here. The fleet wrote the parts; the document only exists on this
+// machine, which is also the only machine that ever saw the real values.
+let document = ([ "# \(abstractor.rehydrate(plan.title))", "" ]
+  + outcomes.sorted { $0.index < $1.index }.flatMap { ["## \($0.section)", "", $0.text, ""] })
+  .joined(separator: "\n")
+let out = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+  .appendingPathComponent("fleet-document.md")
+try? document.write(to: out, atomically: true, encoding: .utf8)
+let nodesUsed = Set(outcomes.map(\.node)).count
+print("  assembled        \(document.count) characters from \(nodesUsed) nodes")
+print("  delivered        \(out.path)")
 
 extension String {
   /// Pads to a fixed column width.
