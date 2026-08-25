@@ -91,13 +91,14 @@ targets:
         product: MLXLMCommon
       - package: swift-transformers
         product: Transformers
-      # Embed Watch Content — the subpath is what makes the phone treat this
-      # as its companion rather than an inert bundle it happens to carry.
+      # Embed Watch Content. Xcodegen knows a watchOS app belongs in Watch/;
+      # the widget belongs in PlugIns/ and gets the default. They were briefly
+      # transposed, which built a widget into the watch slot and shipped an app
+      # with no widget at all.
       - target: NodeWatch
         embed: true
-        copy:
-          destination: productsDirectory
-          subpath: "$(CONTENTS_FOLDER_PATH)/Watch"
+      - target: NodeNetworkWidgets
+        embed: true
     entitlements:
       path: NodeNetwork.entitlements
       # XcodeGen generates this file from `properties` and overwrites whatever
@@ -168,6 +169,100 @@ targets:
 # some point in this project's life, and xcodebuild cannot address a target's
 # signed device build without one. Explicit is also versioned — the schemes
 # can no longer silently vanish.
+  # The fleet watched from a Mac. A viewer, never a worker: the Macs already
+  # serve through NodeAgent under launchd, and a second process competing for
+  # the same GPU would cost throughput in order to display throughput.
+  NodeMonitor:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: ../MacApp/Sources
+      - path: ../Shared/Sources
+      # Only the fleet model and the roster. NodeRole is the iOS idiom split
+      # (iPad manages, phone works) and has no meaning on a Mac.
+      - path: Sources/FleetManager.swift
+      - path: Sources/KnownNodes.swift
+      - path: Sources/LinkTest.swift
+    dependencies:
+      - package: WriteKit
+        product: NodeKit
+      - target: NodeMonitorWidgets
+        embed: true
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodemonitor
+        DEVELOPMENT_TEAM: VG8M5G3FF6
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+    entitlements:
+      path: NodeMonitor.entitlements
+      properties:
+        # Reads the fleet over the LAN and the tailnet. Not sandboxed for
+        # anything else: it writes no files and runs no models.
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+
+  NodeMonitorWidgets:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: ../Widgets/Sources
+      - path: ../Shared/Sources
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodemonitor.widgets
+        DEVELOPMENT_TEAM: VG8M5G3FF6
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+      configs:
+        Debug:
+          INFOPLIST_KEY_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        Release:
+          INFOPLIST_KEY_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    info:
+      path: MonitorWidgets.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: NodeMonitorWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+
+  # Same widget on the phone and the iPad. The extra-large family is offered
+  # only where it exists, which is iPad.
+  NodeNetworkWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../Widgets/Sources
+      - path: ../Shared/Sources
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodenetwork.widgets
+        DEVELOPMENT_TEAM: VG8M5G3FF6
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: NetworkWidgets.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
 schemes:
   NodeNetwork:
     build:
@@ -179,5 +274,11 @@ schemes:
     build:
       targets:
         NodeWatch: all
+    run:
+      config: Debug
+  NodeMonitor:
+    build:
+      targets:
+        NodeMonitor: all
     run:
       config: Debug

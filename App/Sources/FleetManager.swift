@@ -1,6 +1,8 @@
 import Foundation
 import Observation
-import UIKit
+#if canImport(UIKit)
+  import UIKit
+#endif
 import NodeKit
 
 /// One node as the manager currently understands it.
@@ -35,7 +37,15 @@ struct FleetNode: Identifiable, Sendable {
   /// Last measured throughput. Nil until this node has been benchmarked —
   /// deliberately not defaulted to zero, which would read as "measured and slow"
   /// rather than "never measured".
+  /// Requests this node is serving right now.
+  var inFlight: Int?
   var tokensPerSecond: Double?
+  /// Tokens per second this node is producing now, over a rolling ten seconds.
+  ///
+  /// Distinct from `tokensPerSecond`, which is one request's rate: under
+  /// concurrency a node runs many at once, so summing per-request rates across
+  /// a fleet understates it about fivefold.
+  var throughput: Double?
   var lastProbe: Date?
   var probeMilliseconds: Int?
   /// Identifies the machine behind the address.
@@ -269,10 +279,16 @@ final class FleetManager {
       updated.thermal = profile.thermalLabel
       updated.power = profile.powerLabel
       updated.suitedToLongWork = profile.suitedToLongWork
-      updated.tier = NodeTier.current(
-        onMains: profile.power.isExternal,
-        screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
-      )
+      // A Mac has no idle timer to report, and no need of one: what makes an
+      // iOS node permanent is holding its screen awake, and a Mac on mains is
+      // permanent without asking. Resolved before the call because a `#if`
+      // cannot sit inside an argument list.
+      #if canImport(UIKit)
+        let awake = UIApplication.shared.isIdleTimerDisabled
+      #else
+        let awake = true
+      #endif
+      updated.tier = NodeTier.current(onMains: profile.power.isExternal, screenHeldAwake: awake)
       updated.tokensPerSecond = node.tokensPerSecond
       updated.state = .reachable
       updated.probeMilliseconds = 0
@@ -323,6 +339,12 @@ final class FleetManager {
       if let reported = capabilities["tokensPerSecond"] as? Double, reported > 0 {
         updated.tokensPerSecond = reported
       }
+      // The honest figure: tokens in the last ten seconds over ten. Unlike the
+      // line above this one is allowed to be zero — an idle node really is
+      // producing nothing, and holding a stale rate there would show a working
+      // fleet after the work stopped.
+      updated.throughput = payload["throughput"] as? Double
+      updated.inFlight = capabilities["inFlight"] as? Int
       if let label = profile["label"] as? String, !label.isEmpty, label != "iPhone" {
         updated.label = label
       }
