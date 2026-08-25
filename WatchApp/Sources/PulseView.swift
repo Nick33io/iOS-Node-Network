@@ -2,13 +2,13 @@ import SwiftUI
 
 struct PulseView: View {
   @State private var watcher = FleetWatcher()
+  @State private var touchPoint: CGPoint?
+  @State private var lastTouchPoint: CGPoint = .zero
+  @State private var touchEndedAt = Date.distantPast
 
   var body: some View {
     ZStack {
-      ParticleField(
-        engaged: watcher.engaged,
-        transitionedAt: watcher.transitionedAt
-      )
+      field
       VStack {
         Spacer()
         if watcher.engaged {
@@ -22,17 +22,36 @@ struct PulseView: View {
             .foregroundStyle(.secondary)
         }
       }
-      .padding(.bottom, 8)
+      .padding(.bottom, 6)
       .animation(.easeInOut(duration: 0.4), value: watcher.engaged)
     }
     .ignoresSafeArea()
     .onAppear { watcher.start() }
     .onDisappear { watcher.stop() }
-    // Demo hook, so the working state can be seen without a live fleet.
-    .task {
-      if ProcessInfo.processInfo.arguments.contains("-demo") {
-        watcher.stop()
-      }
-    }
+  }
+
+  private var field: some View {
+    var view = ParticleField(
+      engaged: watcher.engaged,
+      transitionedAt: watcher.transitionedAt,
+      touch: touchPoint,
+      touchEndedAt: touchEndedAt
+    )
+    view.lastTouchPoint = lastTouchPoint
+    return
+      view
+      // minimumDistance 0 so a resting finger disturbs the dust immediately —
+      // the reference responds to contact, not to movement.
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { value in
+            touchPoint = value.location
+            lastTouchPoint = value.location
+          }
+          .onEnded { _ in
+            touchPoint = nil
+            touchEndedAt = Date()
+          }
+      )
   }
 }
