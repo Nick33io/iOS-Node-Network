@@ -78,6 +78,12 @@ final class RunModel {
       return LANWriter(model: writerModel, baseURL: base)
     case .onDevice:
       #if canImport(MLX) && !targetEnvironment(simulator)
+        // A model already resident always serves. The guard below exists to
+        // stop a request becoming a silent multi-gigabyte download — it must
+        // never veto weights that are literally in memory.
+        if await deviceWriter.loadedModel != nil {
+          return deviceWriter
+        }
         // Refuse before loading, not inside it. An earlier fix guarded
         // generation, but the download happens here — so a request still hung
         // for however long 4.6 GB takes, with the caller unable to see why. A

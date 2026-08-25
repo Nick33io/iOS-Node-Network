@@ -45,7 +45,16 @@ enum MLXPolicy {
   /// Largest first, and the first pair that genuinely fits wins. Anything that
   /// fits at no context is skipped entirely rather than falling back to a
   /// context it also cannot afford.
-  static var selection: (model: PinnedModel, context: Int) {
+  /// Decided once per launch, at first use, and then held.
+  ///
+  /// Re-evaluating per call was a live outage: a node loaded its chosen 4B,
+  /// which consumed the very headroom the choice was made from — so the next
+  /// request re-selected the 1.7B, and the fail-fast guard rejected work for
+  /// a model the node never needed while the 4B sat loaded and idle. Free
+  /// memory at first use is the launch-time maximum, which is the only honest
+  /// baseline; what a model does to headroom by being loaded must not unseat
+  /// the decision that loaded it.
+  static let selection: (model: PinnedModel, context: Int) = {
     let candidates: [PinnedModel] = [.qwen3_8B_4bit, .qwen3_4B_4bit, .qwen3_1_7B_4bit]
     for candidate in candidates {
       for context in [4096, 3072, 2048] where canHost(candidate, context: context) {
@@ -56,7 +65,7 @@ enum MLXPolicy {
     // the honest last resort — it may still be killed, but reporting a model
     // this node cannot hold would be worse.
     return (.qwen3_1_7B_4bit, 2048)
-  }
+  }()
 
   /// Bytes this process may still allocate before jetsam kills it.
   ///
