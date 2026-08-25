@@ -21,14 +21,22 @@ final class FleetWatcher {
   /// When the engaged state last flipped, for easing the colour transition.
   private(set) var transitionedAt = Date.distantPast
 
-  /// Permanent nodes by stable name, burst nodes by last-known LAN address.
-  /// The phones' entries are best effort — DHCP can move them — but a wrong
-  /// address only mutes their contribution to the total.
+  /// The three Macs, by mDNS name.
+  ///
+  /// Names rather than addresses because DHCP moves the addresses: the two
+  /// phone entries that used to be here — 192.168.1.112 and .98 — were both
+  /// stale, so the watch was polling nothing and would have shown an idle
+  /// fleet however hard the fleet was working. The Mac mini was missing
+  /// outright.
+  ///
+  /// Only Macs. The phones were measured at roughly 5% of fleet throughput and
+  /// they do not survive sustained load — iOS suspends or kills the node app —
+  /// so including them adds churn to the reading without adding signal. This
+  /// display answers "is the fleet working", and the Macs are the fleet.
   var hosts = [
-    "nicholass-macbook-pro-2.local",
-    "33io-backend.local",
-    "192.168.1.112",  // iPhone 15 Pro Max
-    "192.168.1.98",   // iPhone 17 Pro Max
+    "Nicholass-MacBook-Pro-2.local",  // M5 Max
+    "NicX-Mini.local",                // Mac mini M4 Pro
+    "33io-backend.local",             // MacBook Air M3
   ]
 
   private var pollTask: Task<Void, Never>?
