@@ -78,6 +78,13 @@ final class RunModel {
       return LANWriter(model: writerModel, baseURL: base)
     case .onDevice:
       #if canImport(MLX) && !targetEnvironment(simulator)
+        // Refuse before loading, not inside it. An earlier fix guarded
+        // generation, but the download happens here — so a request still hung
+        // for however long 4.6 GB takes, with the caller unable to see why. A
+        // node that lacks its weights must say so in milliseconds.
+        guard MLXWriter.isDownloaded(MLXPolicy.model) else {
+          throw MLXWriterError.notDownloaded(MLXPolicy.allowedModel)
+        }
         phase = .loading
         try await deviceWriter.load { fraction in
           Task { @MainActor [weak self] in self?.loadProgress = fraction }

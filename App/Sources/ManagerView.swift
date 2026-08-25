@@ -53,7 +53,20 @@ struct ManagerView: View {
         VStack(alignment: .leading, spacing: 20) {
           summary
           selfNodePanel
-          modelsPanel
+          HStack(alignment: .top, spacing: 16) {
+            ThroughputPanel(
+              nodes: fleet.nodes,
+              selfLabel: UIDevice.current.name,
+              selfRate: selfRate,
+              isRunning: fleet.isRefreshing
+            )
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+
+            modelsPanel
+              .frame(width: 340)
+          }
           tierSection(.permanent, caption: "always available")
           tierSection(.burst, caption: "join when available")
         }
