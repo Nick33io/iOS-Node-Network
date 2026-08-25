@@ -29,15 +29,27 @@
     public let completed: Int
     public let failed: Int
     public let uptimeSeconds: Int
+    /// Throughput of the last generation this node served.
+    ///
+    /// Reported here so a manager sees real rates without having to run a
+    /// benchmark against every node first. A node that has done work already
+    /// knows how fast it was; making the fleet view ask again would be both
+    /// slower and less true, since the benchmark prompt is not the work.
+    public let tokensPerSecond: Double
 
-    public init(inFlight: Int, completed: Int, failed: Int, uptimeSeconds: Int) {
+    public init(
+      inFlight: Int, completed: Int, failed: Int, uptimeSeconds: Int,
+      tokensPerSecond: Double = 0
+    ) {
       self.inFlight = inFlight
       self.completed = completed
       self.failed = failed
       self.uptimeSeconds = uptimeSeconds
+      self.tokensPerSecond = tokensPerSecond
     }
 
-    public static let idle = NodeLoad(inFlight: 0, completed: 0, failed: 0, uptimeSeconds: 0)
+    public static let idle = NodeLoad(
+      inFlight: 0, completed: 0, failed: 0, uptimeSeconds: 0)
   }
 
   public enum BridgeProfileEmitter {
@@ -151,6 +163,7 @@
         "completed": load.completed,
         "failed": load.failed,
         "uptimeSeconds": load.uptimeSeconds,
+        "tokensPerSecond": load.tokensPerSecond,
         ],
       ]
     }

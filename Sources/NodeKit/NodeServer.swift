@@ -50,7 +50,8 @@
     public var load: NodeLoad {
       NodeLoad(
         inFlight: inFlight, completed: completed, failed: failed,
-        uptimeSeconds: servingSince.map { Int(-$0.timeIntervalSinceNow) } ?? 0
+        uptimeSeconds: servingSince.map { Int(-$0.timeIntervalSinceNow) } ?? 0,
+        tokensPerSecond: lastTokensPerSecond
       )
     }
 
@@ -209,6 +210,12 @@
           // DeviceWriter. Close enough to compare devices to each other, which
           // is the only comparison this number is used for.
           let tokens = max(1, characters / 4)
+          // Record what this node just did, so /health can answer "how fast
+          // are you" without the caller running a benchmark of its own.
+          let rate = seconds > 0 ? Double(tokens) / seconds : 0
+          lastTokensPerSecond = rate
+          tokensServed += tokens
+          completed += 1
           send(
             json: [
               "text": text,

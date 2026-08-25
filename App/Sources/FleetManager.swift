@@ -261,6 +261,7 @@ final class FleetManager {
         onMains: profile.power.isExternal,
         screenHeldAwake: UIApplication.shared.isIdleTimerDisabled
       )
+      updated.tokensPerSecond = node.tokensPerSecond
       updated.state = .reachable
       updated.probeMilliseconds = 0
       updated.failureDetail = nil
@@ -303,6 +304,13 @@ final class FleetManager {
       updated.footprintGiB = capabilities["footprintGiB"] as? Double
       updated.availableGiB = capabilities["availableGiB"] as? Double
       updated.tier = (capabilities["tier"] as? String).flatMap(NodeTier.init(rawValue:))
+      // A node reports its own last rate, so the fleet view fills in without
+      // anyone running a benchmark first. Only overwrite with a real value —
+      // a node that has not generated yet reports zero, and zero would erase a
+      // measurement taken earlier.
+      if let reported = capabilities["tokensPerSecond"] as? Double, reported > 0 {
+        updated.tokensPerSecond = reported
+      }
       if let label = profile["label"] as? String, !label.isEmpty, label != "iPhone" {
         updated.label = label
       }

@@ -101,7 +101,11 @@ import Foundation
             label: DeviceProfile.localLabel,
             backend: options.backend.label,
             model: model,
-            limits: options.limits
+            limits: options.limits,
+            // Read from the static, not the local: the closure is built before
+            // the local `server` is assigned, so capturing it would report an
+            // idle node forever.
+            load: Self.server?.load ?? .idle
           )
         }
       )

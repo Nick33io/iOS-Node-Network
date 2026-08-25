@@ -402,11 +402,16 @@ struct ManagerView: View {
       if let swept = fleet.lastSweep {
         Stat(key: "last sweep", value: swept.formatted(date: .omitted, time: .standard))
       }
-      Stat(
-        key: "screen",
-        value: screen.isDimmed ? "dimmed" : "lit",
-        tint: screen.isDimmed ? .secondary : .green
-      )
+      Button {
+        screen.setDimming(!screen.dimsWhenIdle)
+      } label: {
+        Stat(
+          key: "screen",
+          value: screen.dimsWhenIdle ? (screen.isDimmed ? "dimmed" : "auto-dim") : "always lit",
+          tint: screen.dimsWhenIdle ? .yellow : .green
+        )
+      }
+      .buttonStyle(.plain)
       Stat(
         key: "auto",
         value: fleet.autoRefresh ? "\(Int(fleet.refreshInterval))s" : "off",

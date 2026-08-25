@@ -24,8 +24,17 @@ final class ScreenKeeper {
   private var restoreLevel: CGFloat = UIScreen.main.brightness
   private var dimTask: Task<Void, Never>?
 
-  /// Seconds of no interaction before dimming.
-  var idleBeforeDim: TimeInterval = 60
+  /// Whether to dim at all.
+  ///
+  /// Off by default. Dimming saves real power on a node left running
+  /// overnight, but these screens are also the fleet's only display — a panel
+  /// that fades to near-black while someone is reading it is a worse failure
+  /// than a slightly shorter battery. Opt in when the device is deployed
+  /// rather than observed.
+  var dimsWhenIdle = false
+
+  /// Seconds of no interaction before dimming, when enabled.
+  var idleBeforeDim: TimeInterval = 120
   /// Not zero: a fully black panel reads as a crashed device, and someone
   /// walking past should be able to see the node is alive.
   var dimmedLevel: CGFloat = 0.02
@@ -36,7 +45,9 @@ final class ScreenKeeper {
     isHolding = true
     restoreLevel = UIScreen.main.brightness
     UIApplication.shared.isIdleTimerDisabled = true
-    scheduleDim()
+    // The screen never locks either way; dimming is the separate, optional
+    // half of keeping a node alive cheaply.
+    if dimsWhenIdle { scheduleDim() }
   }
 
   func release() {
@@ -51,7 +62,19 @@ final class ScreenKeeper {
   func touched() {
     guard isHolding else { return }
     undim()
-    scheduleDim()
+    if dimsWhenIdle { scheduleDim() }
+  }
+
+  /// Turns idle dimming on or off, taking effect immediately.
+  func setDimming(_ enabled: Bool) {
+    dimsWhenIdle = enabled
+    if enabled {
+      scheduleDim()
+    } else {
+      dimTask?.cancel()
+      dimTask = nil
+      undim()
+    }
   }
 
   private func scheduleDim() {
