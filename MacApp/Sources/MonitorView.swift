@@ -14,6 +14,7 @@ import SwiftUI
 /// create, and on a monitor the hierarchy is the product.
 struct MonitorView: View {
   @State private var fleet = FleetManager()
+  @State private var layout = BoardLayout()
   @State private var landedOn: String? = UserDefaults.standard.string(forKey: Self.landingKey)
   @State private var picking = false
 
@@ -36,7 +37,18 @@ struct MonitorView: View {
       HStack(spacing: 0) {
         roster
         Rectangle().fill(Palette.hairline).frame(width: 1)
-        detail
+        VStack(spacing: 0) {
+          boardBar
+          Rectangle().fill(Palette.hairline).frame(height: 1)
+          BoardView(
+            layout: layout,
+            nodes: nodes,
+            refresh: { node in Task { await fleet.refresh(node) } },
+            measure: { node in Task { await fleet.measure(node) } },
+            testLink: { node in Task { await fleet.testLink(node) } },
+            remove: { node in fleet.remove(node) }
+          )
+        }
       }
     }
     .task {
@@ -104,7 +116,44 @@ struct MonitorView: View {
     .glassEffect(.regular, in: .rect(cornerRadius: 14))
   }
 
-  // MARK: Detail
+  // MARK: Board bar
+
+  /// The landed node, and the two things you do to an arrangement.
+  private var boardBar: some View {
+    HStack(spacing: 14) {
+      if let node = focused {
+        Circle().fill(node.signal).frame(width: 7, height: 7)
+        Text(node.label)
+          .font(.system(size: 14, weight: .medium))
+          .foregroundStyle(Palette.ink)
+        Text([node.hardware, node.model?.split(separator: "/").last.map(String.init)]
+          .compactMap { $0 }.joined(separator: "  ·  "))
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundStyle(Palette.dim)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 12)
+      Text("\(nodes.count) modules")
+        .font(.system(size: 9.5, design: .monospaced))
+        .foregroundStyle(Palette.faint)
+      Button {
+        withAnimation(.smooth(duration: 0.3)) { layout.reset() }
+      } label: {
+        Text("RESET LAYOUT")
+          .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+          .tracking(0.6)
+          .foregroundStyle(Palette.ink.opacity(0.6))
+          .padding(.horizontal, 9)
+          .padding(.vertical, 5)
+          .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.05)))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, 20)
+    .padding(.vertical, 13)
+  }
+
+  // MARK: Detail (unused while the board is the surface)
 
   @ViewBuilder
   private var detail: some View {
