@@ -54,7 +54,13 @@ struct PinnedModel: Sendable {
   /// with context and layer count, not with weight size.
   func residentBytes(context: Int) -> Int64 {
     let kv = Int64(context * layers * 2 * kvHeads * headDim * 2)
-    let overhead: Int64 = 400 * 1024 * 1024
+    // 1.2 GB, set from a measured failure rather than a guess. At 400 MB three
+    // iOS devices each cleared the 8B by 60-90 MB; two were killed the moment
+    // they tried to load it, while the third — which had landed on the 4B —
+    // ran a 35 second sustained test without a single failure. The crash puts
+    // real overhead above 460 MB. Erring high costs a size class; erring low
+    // costs the node.
+    let overhead: Int64 = 1200 * 1024 * 1024
     return totalBytes + kv + overhead
   }
 
