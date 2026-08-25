@@ -20,6 +20,9 @@ final class FleetWatcher {
   private(set) var reachableNodes = 0
   /// When the engaged state last flipped, for easing the colour transition.
   private(set) var transitionedAt = Date.distantPast
+  /// True when this reading came from the phone rather than the watch's own
+  /// polling, so the display can say which it is.
+  private(set) var viaPhone = false
 
   /// The three Macs, by mDNS name.
   ///
@@ -49,6 +52,7 @@ final class FleetWatcher {
 
   func start() {
     guard pollTask == nil else { return }
+    PhoneLink.shared.activate()
     pollTask = Task { [weak self] in
       while !Task.isCancelled {
         await self?.sweep()
@@ -97,6 +101,20 @@ final class FleetWatcher {
         inFlight += flight
         rate += nodeRate
       }
+    }
+
+    // Direct polling is primary and only falls back when it finds nothing at
+    // all. The Macs are the reliable part of this fleet; the phone is not —
+    // iOS suspends and kills the node app under exactly the sustained load
+    // worth watching — so the phone answers for the case direct cannot cover,
+    // being off the fleet's network, rather than standing in front of it.
+    if reachable == 0, let relayed = await PhoneLink.shared.fleet() {
+      reachable = relayed.nodes
+      inFlight = relayed.inFlight
+      rate = relayed.throughput
+      viaPhone = reachable > 0
+    } else {
+      viaPhone = false
     }
 
     reachableNodes = reachable

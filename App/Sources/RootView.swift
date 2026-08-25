@@ -71,6 +71,8 @@ struct RootView: View {
     }
     .tint(.white)
     .task {
+      // Answers the watch when it cannot reach the fleet itself.
+      WatchLink.shared.activate()
       telemetry.start { server?.servedBytes ?? 0 }
       // Resume serving if this node was serving before. Every deploy relaunches
       // the app, and an iOS node also dies whenever it is backgrounded — so

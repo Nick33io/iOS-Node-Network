@@ -12,7 +12,8 @@ struct PulseView: View {
       VStack {
         Spacer()
         if watcher.engaged {
-          Text(String(format: "%.0f tok/s", watcher.tokensPerSecond))
+          Text(String(format: "%.0f tok/s%@", watcher.tokensPerSecond,
+                      watcher.viaPhone ? " ·phone" : ""))
             .font(.system(.body, design: .monospaced).weight(.semibold))
             .foregroundStyle(Color(red: 0.45, green: 0.98, blue: 0.6))
             .transition(.opacity)
@@ -20,7 +21,9 @@ struct PulseView: View {
           // Always show the count, not just the zero case. "no fleet" alone
           // cannot distinguish a quiet fleet from an unreachable one, which is
           // exactly the ambiguity that hid a total polling failure.
-          Text(watcher.reachableNodes == 0 ? "no fleet" : "\(watcher.reachableNodes) idle")
+          Text(watcher.reachableNodes == 0
+            ? "no fleet"
+            : "\(watcher.reachableNodes) idle\(watcher.viaPhone ? " ·phone" : "")")
             .font(.system(.caption2, design: .monospaced))
             .foregroundStyle(.secondary)
         }

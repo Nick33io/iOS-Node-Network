@@ -26,10 +26,17 @@ packages:
     exactVersion: 1.3.3
 
 targets:
-  # The fleet on the wrist. Watch-only on purpose: watchOS cannot run a model
-  # or join the tailnet, so this is a display — it polls the LAN nodes over
-  # Wi-Fi and shows whether the fleet is working. Standalone (not embedded in
-  # the iOS app) so it installs and iterates without touching the phone build.
+  # The fleet on the wrist. watchOS cannot run a model or join the tailnet, so
+  # this is a display: it polls the Macs directly over Wi-Fi and shows whether
+  # the fleet is working.
+  #
+  # Embedded in the iOS app rather than watch-only, because WCSession only ever
+  # connects an iOS app to its OWN companion watch app. Standalone was the
+  # nicer thing to iterate on, but it made the phone unreachable from the
+  # wrist, and the phone is the only route to the fleet when the watch is off
+  # the LAN. Direct polling stays primary — the phones are the least reliable
+  # part of this fleet and the Macs are the part that stays up — so the link is
+  # a fallback for when direct finds nothing, not a replacement for it.
   NodeWatch:
     type: application
     platform: watchOS
@@ -39,19 +46,20 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodewatch
+        # Must be a suffix of the host app id, or watchOS will not treat the
+        # two as companions and WCSession never activates.
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodenetwork.watchkitapp
         DEVELOPMENT_TEAM: VG8M5G3FF6
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "4"
-        INFOPLIST_KEY_WKWatchOnly: YES
         INFOPLIST_KEY_CFBundleDisplayName: NOD3 Pulse
     info:
       path: WatchInfo.plist
       properties:
-        WKWatchOnly: true
+        WKCompanionAppBundleIdentifier: io.thirtythree.nodenetwork
         # Cleartext to the fleet's LAN nodes, same posture as the iOS app: an
         # internal tool talking to machines the owner controls.
         NSAppTransportSecurity:
@@ -83,6 +91,13 @@ targets:
         product: MLXLMCommon
       - package: swift-transformers
         product: Transformers
+      # Embed Watch Content — the subpath is what makes the phone treat this
+      # as its companion rather than an inert bundle it happens to carry.
+      - target: NodeWatch
+        embed: true
+        copy:
+          destination: productsDirectory
+          subpath: "$(CONTENTS_FOLDER_PATH)/Watch"
     entitlements:
       path: NodeNetwork.entitlements
       # XcodeGen generates this file from `properties` and overwrites whatever
