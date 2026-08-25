@@ -29,20 +29,41 @@ struct ThroughputPanel: View {
   }
 
   private var readings: [Reading] {
-    var rows = nodes.filter { $0.aliasOf == nil }.map {
+    // Every roster entry appears, including nodes that are down — a fleet view
+    // that hides absent nodes makes a shrinking fleet look like a healthy one.
+    var rows = nodes.filter { $0.aliasOf == nil }.map { node in
       Reading(
-        id: $0.id, label: $0.label, rate: $0.tokensPerSecond ?? 0,
-        tier: $0.tier, reachable: $0.isReachable)
+        id: node.id,
+        label: node.label,
+        // A self entry carries this device's own served rate, which its own
+        // probe cannot report: it answers locally and never asks itself.
+        rate: node.isSelf ? max(selfRate, node.tokensPerSecond ?? 0) : (node.tokensPerSecond ?? 0),
+        tier: node.tier,
+        reachable: node.isReachable)
     }
-    if !rows.contains(where: { $0.label == selfLabel }) {
+    // Only add a synthetic self row when this device is genuinely absent from
+    // the roster. Matching on label was wrong — a device's Tailscale name and
+    // its roster label routinely differ, so it added a duplicate of itself.
+    if !nodes.contains(where: \.isSelf) {
       rows.insert(
-        Reading(id: "self", label: selfLabel, rate: selfRate, tier: NodeTier.current(), reachable: true),
+        Reading(
+          id: "self", label: selfLabel, rate: selfRate,
+          tier: NodeTier.current(), reachable: true),
         at: 0)
     }
-    return rows.sorted { $0.rate > $1.rate }
+    // Reachable first, then by rate: a fast node that is down should not sit
+    // above a slower one that is actually serving.
+    return rows.sorted {
+      if $0.reachable != $1.reachable { return $0.reachable }
+      return $0.rate > $1.rate
+    }
   }
 
-  private var aggregate: Double { readings.reduce(0) { $0 + $1.rate } }
+  /// Only reachable nodes count. Summing a node that is down would report
+  /// capacity the fleet does not have.
+  private var aggregate: Double {
+    readings.filter(\.reachable).reduce(0) { $0 + $1.rate }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -72,9 +93,12 @@ struct ThroughputPanel: View {
               .font(.system(.caption2, design: .monospaced))
               .lineLimit(1)
             Spacer()
-            Text(row.rate > 0 ? String(format: "%.1f", row.rate) : "—")
+            // "—" and "down" are different facts: one node has simply not
+            // generated yet, the other cannot be reached at all.
+            Text(row.reachable ? (row.rate > 0 ? String(format: "%.1f", row.rate) : "—") : "down")
               .font(.system(.caption2, design: .monospaced))
-              .foregroundStyle(row.rate > 0 ? Color.green : Color.secondary)
+              .foregroundStyle(
+                !row.reachable ? Color.red : (row.rate > 0 ? Color.green : Color.secondary))
           }
           GeometryReader { proxy in
             ZStack(alignment: .leading) {
