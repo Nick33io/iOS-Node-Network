@@ -42,16 +42,30 @@ final class BoardLayout {
     }
   }
 
-  func frame(for id: String, index: Int) -> ModuleFrame {
+  /// Where the console's fixed panels sit before anyone moves them. The two
+  /// span the width above the nodes, which is the order the iPad reads in:
+  /// what the fleet is doing, then what each machine contributes, then the
+  /// machines themselves.
+  static let summaryFrame = ModuleFrame(col: 0, row: 0, cols: 27, rows: 4)
+  static let throughputFrame = ModuleFrame(col: 0, row: 5, cols: 27, rows: 10)
+  /// Nodes begin below the panels, and each tier starts on its own row so the
+  /// grouping survives a fresh layout.
+  static let nodesTopRow = 17
+
+  func frame(for id: String, default fallback: ModuleFrame) -> ModuleFrame {
     if let existing = frames[id] { return existing }
-    // First sight of a node: lay it out reading order, four across.
-    let placed = ModuleFrame(
-      col: (index % 4) * (Self.collapsed.cols + 1),
-      row: (index / 4) * (Self.collapsed.rows + 1),
-      cols: Self.collapsed.cols, rows: Self.collapsed.rows
+    frames[id] = fallback
+    return fallback
+  }
+
+  /// Default placement for a node: four across, permanent tier first, each
+  /// tier starting a fresh band.
+  static func nodeFrame(indexInTier: Int, tierBand: Int) -> ModuleFrame {
+    ModuleFrame(
+      col: (indexInTier % 4) * (collapsed.cols + 1),
+      row: nodesTopRow + tierBand + (indexInTier / 4) * (collapsed.rows + 1),
+      cols: collapsed.cols, rows: collapsed.rows
     )
-    frames[id] = placed
-    return placed
   }
 
   func move(_ id: String, toCol col: Int, row: Int) {

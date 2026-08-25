@@ -184,6 +184,9 @@ targets:
       - path: Sources/FleetManager.swift
       - path: Sources/KnownNodes.swift
       - path: Sources/LinkTest.swift
+      # The per-node bar chart, shared verbatim with the iPad console so the
+      # two read identically. Already free of UIKit.
+      - path: Sources/ThroughputPanel.swift
     dependencies:
       - package: WriteKit
         product: NodeKit

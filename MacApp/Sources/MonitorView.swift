@@ -42,7 +42,9 @@ struct MonitorView: View {
           Rectangle().fill(Palette.hairline).frame(height: 1)
           BoardView(
             layout: layout,
-            nodes: nodes,
+            items: [.summary, .throughput] + nodes.map(BoardItem.node),
+            fleet: fleet,
+            selfLabel: Host.current().localizedName ?? "this Mac",
             refresh: { node in Task { await fleet.refresh(node) } },
             measure: { node in Task { await fleet.measure(node) } },
             testLink: { node in Task { await fleet.testLink(node) } },
@@ -72,11 +74,9 @@ struct MonitorView: View {
         aggregate
 
         ScrollView {
-          VStack(spacing: 6) {
-            ForEach(nodes) { node in
-              RosterRow(node: node, landed: node.host == focused?.host)
-                .onTapGesture { land(on: node) }
-            }
+          VStack(alignment: .leading, spacing: 14) {
+            tier(.permanent, "always available", Palette.live)
+            tier(.burst, "join when available", Palette.warn)
           }
         }
         .scrollIndicators(.never)
@@ -114,6 +114,35 @@ struct MonitorView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(16)
     .glassEffect(.regular, in: .rect(cornerRadius: 14))
+  }
+
+  /// The roster, grouped the way the iPad console groups it. A tier with no
+  /// members is omitted rather than shown empty — an empty heading reads as a
+  /// fault when it only means this fleet has no phones attached today.
+  @ViewBuilder
+  private func tier(_ tier: NodeTier, _ caption: String, _ tint: Color) -> some View {
+    let members = nodes.filter { tier == .permanent ? $0.tier == .permanent : $0.tier != .permanent }
+    if !members.isEmpty {
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: 7) {
+          Text(tier.label.uppercased())
+            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+            .tracking(1.8)
+            .foregroundStyle(tint)
+          Text(caption)
+            .font(.system(size: 8.5, design: .monospaced))
+            .foregroundStyle(Palette.faint)
+          Spacer(minLength: 0)
+          Text("\(members.filter(\.isReachable).count)/\(members.count)")
+            .font(.system(size: 8.5, design: .monospaced))
+            .foregroundStyle(Palette.dim)
+        }
+        ForEach(members) { node in
+          RosterRow(node: node, landed: node.host == focused?.host)
+            .onTapGesture { land(on: node) }
+        }
+      }
+    }
   }
 
   // MARK: Board bar
