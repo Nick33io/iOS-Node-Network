@@ -89,6 +89,30 @@ struct PinnedModel: Sendable {
 
   /// 4.62 GB. For devices with both the headroom and the entitlement — an M4
   /// iPad, not a phone. Captured from the Hugging Face tree on 2026-08-23.
+  /// Qwen3-8B at 3-bit — the largest model that fits an iOS jetsam budget.
+  ///
+  /// The 4-bit build needs 6.50 GB against a measured 6.00 GB ceiling and is
+  /// killed on load; at 3-bit the same model needs 5.41 GB and fits with the
+  /// conservative 1.2 GB overhead left untouched. Capability on a phone comes
+  /// from fewer bits, not from more memory: the ceiling is jetsam, and no
+  /// entitlement moves it further than increased-memory-limit already has.
+  static let qwen3_8B_3bit = PinnedModel(
+    id: "mlx-community/Qwen3-8B-3bit",
+    revision: "619ded35b7d1d083ccafc367ea5ccdab1840b74d",
+    layers: 36, kvHeads: 8, headDim: 128,
+    files: [
+      ModelFile(path: "added_tokens.json", size: 707, digest: .gitBlob("b54f9135e44c1e81047e8d05cb027af8bc039eed")),
+      ModelFile(path: "config.json", size: 939, digest: .gitBlob("cf5cea411b6080b89ac0d37918f7fda6ed85ed04")),
+      ModelFile(path: "merges.txt", size: 1671853, digest: .gitBlob("31349551d90c7606f325fe0f11bbb8bd5fa0d7c7")),
+      ModelFile(path: "model.safetensors", size: 3584031644, digest: .sha256("b9694bdb1f737223836235c0427b424ace11d566eeab0ac91ff8050143bd20a1")),
+      ModelFile(path: "model.safetensors.index.json", size: 64065, digest: .gitBlob("01bae3b53a5c5d19ec5657dd1a7a2efe8482e94c")),
+      ModelFile(path: "special_tokens_map.json", size: 613, digest: .gitBlob("ac23c0aaa2434523c494330aeb79c58395378103")),
+      ModelFile(path: "tokenizer.json", size: 11422654, digest: .sha256("aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4")),
+      ModelFile(path: "tokenizer_config.json", size: 9706, digest: .gitBlob("7345216a0785dc7086e8c245b2a9d3896ce2b756")),
+      ModelFile(path: "vocab.json", size: 2776833, digest: .gitBlob("4783fe10ac3adce15ac8f358ef5462739852c569")),
+    ]
+  )
+
   static let qwen3_8B_4bit = PinnedModel(
     id: "mlx-community/Qwen3-8B-4bit",
     revision: "545dc4251c05440727734bcd94334791f6ab0192",

@@ -71,6 +71,24 @@ final class RunModel {
     return try await makeWriter(base: base)
   }
 
+  /// Downloads the weights this node selected, for `POST /fetch`.
+  ///
+  /// The caller does not name a model. Which model a device should hold is
+  /// decided by `MLXPolicy` from that device's own headroom — a 16 GB iPad and
+  /// an 8 GB phone do not belong on the same weights — so the fleet asks a node
+  /// to fetch whatever it chose rather than telling it what to run.
+  func prefetchSelected() async throws {
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      guard backend == .onDevice else {
+        throw MLXWriterError.unavailable("backend is \(backend.label), not on-device")
+      }
+      guard !MLXWriter.isDownloaded(MLXPolicy.model) else { return }
+      try await deviceWriter.prefetch(MLXPolicy.model) { fraction in
+        Task { @MainActor [weak self] in self?.loadProgress = fraction }
+      }
+    #endif
+  }
+
   /// The writer for this run, honouring the selected backend.
   private func makeWriter(base: URL) async throws -> any DeviceWriter {
     switch backend {

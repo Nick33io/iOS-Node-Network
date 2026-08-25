@@ -55,7 +55,21 @@ enum MLXPolicy {
   /// baseline; what a model does to headroom by being loaded must not unseat
   /// the decision that loaded it.
   static let selection: (model: PinnedModel, context: Int) = {
-    let candidates: [PinnedModel] = [.qwen3_8B_4bit, .qwen3_4B_4bit, .qwen3_1_7B_4bit]
+    // Largest first. The 8B is deliberately absent at BOTH quantisations.
+    //
+    // 4-bit needs 6.50 GB against a measured 6.00 GB ceiling, which was never
+    // close. 3-bit computes to 5.41 GB and looks like it clears — it does not.
+    // Provisioned to an iPad Pro M4, a 17 Pro Max and a 15 Pro Max, it was
+    // jetsam-killed on load by all three, every time. Steady-state arithmetic
+    // is the wrong model for the question: loading dequantises on top of the
+    // mapped file, so the transient peak is what jetsam sees, and 5.86 GB of
+    // predicted residency against a 6.00 GB ceiling leaves nothing for it.
+    //
+    // The honest conclusion is that an 8B does not run on these devices at any
+    // quantisation available, and no entitlement changes that. 4B is the
+    // ceiling-appropriate size. Keep it in the catalogue for manual experiment;
+    // never let the automatic ladder select it.
+    let candidates: [PinnedModel] = [.qwen3_4B_4bit, .qwen3_1_7B_4bit]
     for candidate in candidates {
       for context in [4096, 3072, 2048] where canHost(candidate, context: context) {
         return (candidate, context)

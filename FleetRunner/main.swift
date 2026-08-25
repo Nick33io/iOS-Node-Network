@@ -183,6 +183,7 @@ print("\n\(permanent.count) permanent, \(burst.count) burst\n")
 
 // Plan on the fleet's own planner. The brief is sealed first: the planner sees
 // placeholders and labels, never a real name or figure.
+let targetWords = CommandLine.arguments.dropFirst().first.flatMap(Int.init) ?? 2400
 let abstractor = Abstractor(facts: facts)
 let sealedBrief = try abstractor.sealed(brief)
 print("planning (brief sealed — \(facts.facts.count) values withheld)...")
@@ -204,7 +205,12 @@ let plannedAt = Date()
 let plan = try await planner.plan(
   PlanRequest(
     brief: sealedBrief, catalog: facts.catalog,
-    wordBudgetPerSection: floor, targetWords: 600
+    // Sized from the argument so the job can be made big enough to fill the
+    // fleet. At the old fixed 600 against a ~340-word floor the planner
+    // returned two sections, so a six-node fleet ran on two nodes and the
+    // scheduler was right to leave the rest idle — the document, not the
+    // dispatch, was the limit.
+    wordBudgetPerSection: floor, targetWords: targetWords
   )
 ).normalized()
 let limits = DeviceLimits(
@@ -268,11 +274,35 @@ for node in ranked {
   print("  " + node.label.padded(20) + String(format: "%.0f ch/s", node.charactersPerSecond))
 }
 print("")
+// Greedy list scheduling: each section goes to whichever node would finish it
+// soonest, given what that node is already holding. Round-robin over a ranked
+// list is not enough — with five sections over six nodes it hands one to the
+// slowest device, and the slowest device then sets the wall while the fastest
+// sits idle after three seconds. Weighting by measured speed lets the M5 Max
+// take two sections instead, and drops a node entirely when including it would
+// make the document later rather than sooner.
+var freeAt: [String: Double] = [:]
 var dealt: [String: [(Int, SectionSpec)]] = [:]
 for (index, spec) in plan.sections.enumerated() {
-  let node = ranked[index % ranked.count]
-  dealt[node.label, default: []].append((index, spec))
+  // ~6 characters per word, and never divide by a speed of zero: a node that
+  // failed its probe is treated as very slow rather than infinitely fast.
+  let characters = Double(spec.targetWords) * 6
+  var best: (node: Node, finish: Double)?
+  for node in ranked {
+    let rate = max(node.charactersPerSecond, 1)
+    let finish = (freeAt[node.label] ?? 0) + characters / rate
+    if best == nil || finish < best!.finish { best = (node, finish) }
+  }
+  guard let winner = best else { continue }
+  freeAt[winner.node.label] = winner.finish
+  dealt[winner.node.label, default: []].append((index, spec))
 }
+for node in ranked where !(dealt[node.label] ?? []).isEmpty {
+  let count = dealt[node.label]!.count
+  print("  " + node.label.padded(20) + "\(count) section\(count == 1 ? "" : "s")"
+    + String(format: "  (~%.0fs)", freeAt[node.label] ?? 0))
+}
+print("")
 
 let started = Date()
 let outcomes = await withTaskGroup(of: [Outcome].self) { group -> [Outcome] in

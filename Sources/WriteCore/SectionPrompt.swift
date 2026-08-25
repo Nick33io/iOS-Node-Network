@@ -50,19 +50,22 @@ public struct SectionPromptBuilder: Sendable {
 
     var body = """
 
-      SECTION: \(section.heading)
-      GOAL: \(section.intent)
-      LENGTH: about \(section.targetWords) words.
+      You are writing the section titled "\(section.heading)".
+      Its purpose: \(section.intent)
+      Write about \(section.targetWords) words.
       """
 
     if !section.points.isEmpty {
-      let points = section.points.map { "- \($0)" }.joined(separator: "\n")
-      body += "\n\nCOVER:\n\(points)"
+      // Inline, not a bullet list. A labelled list is a shape the model copies:
+      // sections came back opening with bare fragments of these very points
+      // ("shooting days") before any prose. Prose in, prose out.
+      let points = section.points.joined(separator: "; ")
+      body += "\n\nCover these points in your prose: \(points)."
     }
 
     if !required.isEmpty {
-      let values = required.map { "- \($0)" }.joined(separator: "\n")
-      body += "\n\nMUST APPEAR VERBATIM:\n\(values)"
+      let values = required.joined(separator: "; ")
+      body += "\n\nThese values must appear word for word inside your prose: \(values)."
     }
 
     let fixed = head + body

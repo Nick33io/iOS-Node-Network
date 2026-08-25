@@ -37,7 +37,7 @@ final class ModelStore {
   var lastError: String?
 
   static let catalogue: [PinnedModel] = [
-    .qwen3_1_7B_4bit, .qwen3_4B_4bit, .qwen3_8B_4bit,
+    .qwen3_1_7B_4bit, .qwen3_4B_4bit, .qwen3_8B_3bit, .qwen3_8B_4bit,
   ]
 
   init() {

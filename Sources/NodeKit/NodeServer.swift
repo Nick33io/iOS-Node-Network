@@ -77,6 +77,21 @@
       self.describe = describe
     }
 
+    private var fetchModel: (@MainActor () async throws -> Void)?
+    private var fetching = false
+    private var fetchError: String?
+
+    /// Registers the handler for `POST /fetch`.
+    ///
+    /// Injected for the same reason as the glyph supplier: NodeKit must not
+    /// import MLX. Without this the only way to put a model on a device was to
+    /// tap its MODELS panel, which does not scale past the device you are
+    /// holding — provisioning a new model across the fleet meant picking up
+    /// every phone.
+    public func provideFetch(_ handler: @escaping @MainActor () async throws -> Void) {
+      fetchModel = handler
+    }
+
     /// Registers a supplier for the ambient frame served on `/glyphs`.
     ///
     /// Injected rather than imported so NodeKit stays free of AVFoundation and
@@ -181,8 +196,34 @@
         let size = min(max(0, requested), 4 << 20)
         sendRaw(status: "200 OK", body: Data(repeating: 0x2E, count: size), on: connection)
 
+      case ("POST", "/fetch"):
+        // 202 and return. A model is gigabytes; holding the connection open for
+        // the length of the download is how `/generate` used to hang, and the
+        // caller cannot tell a slow download from a wedged node. Poll /health
+        // for `fetching`, or just retry /generate until it stops refusing.
+        guard let fetchModel else {
+          send(json: ["error": "this node cannot fetch"], status: "501 Not Implemented", on: connection)
+          return
+        }
+        if fetching {
+          send(json: ["status": "already fetching"], status: "202 Accepted", on: connection)
+          return
+        }
+        fetching = true
+        fetchError = nil
+        Task { @MainActor in
+          do { try await fetchModel() } catch { self.fetchError = String(describing: error) }
+          self.fetching = false
+        }
+        send(json: ["status": "fetching"], status: "202 Accepted", on: connection)
+
     case ("GET", "/health"):
-        send(json: describe(), status: "200 OK", on: connection)
+        // Fetch state rides on /health so a caller can tell "still downloading"
+        // from "refusing work", which otherwise look identical from outside.
+        var payload = describe()
+        payload["fetching"] = fetching
+        if let fetchError { payload["fetchError"] = fetchError }
+        send(json: payload, status: "200 OK", on: connection)
 
       case ("POST", "/generate"):
         inFlight += 1

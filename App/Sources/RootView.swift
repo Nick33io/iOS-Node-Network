@@ -170,6 +170,10 @@ struct RootView: View {
         )
       }
     )
+    // Lets the fleet provision this node remotely. The model a node should
+    // hold is decided by MLXPolicy from its own headroom, so the caller does
+    // not name one — it asks the node to fetch whatever it selected.
+    created.provideFetch { try await model.prefetchSelected() }
     server = created
     return created
   }
