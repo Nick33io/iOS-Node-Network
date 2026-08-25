@@ -4,14 +4,18 @@ import SwiftUI
 /// The fleet at a glance, and one node in detail.
 ///
 /// Landing on a node rather than opening to a summary is deliberate: the fleet
-/// total is a number you check, but a node is a thing you watch, and the one
-/// worth watching differs by what you are doing. The choice persists, so the
+/// total is a number you check, but a node is a thing you watch, and which one
+/// is worth watching depends on what you are doing. The choice persists, so the
 /// window comes back where you left it.
+///
+/// Glass is used on three surfaces and nowhere else — the aggregate, the
+/// roster rows, and the landed node's header. Everything else is a hairline on
+/// black. Material on every panel flattens the hierarchy it is supposed to
+/// create, and on a monitor the hierarchy is the product.
 struct MonitorView: View {
   @State private var fleet = FleetManager()
   @State private var landedOn: String? = UserDefaults.standard.string(forKey: Self.landingKey)
   @State private var picking = false
-  @Namespace private var glass
 
   private static let landingKey = "nod3.monitor.landing"
 
@@ -20,19 +24,18 @@ struct MonitorView: View {
     nodes.first { $0.host == landedOn } ?? nodes.first { $0.state == .reachable }
   }
   /// Only nodes reporting a live rate contribute. A node that has never
-  /// generated reports nothing, and counting it as zero would read the same as
+  /// generated reports nothing, and counting that as zero reads identically to
   /// a node that has stopped.
-  private var fleetThroughput: Double {
-    nodes.compactMap(\.throughput).reduce(0, +)
-  }
+  private var throughput: Double { nodes.compactMap(\.throughput).reduce(0, +) }
   private var working: Int { nodes.filter { ($0.inFlight ?? 0) > 0 }.count }
+  private var down: Int { nodes.filter { $0.state != .reachable }.count }
 
   var body: some View {
     ZStack {
-      background
+      Palette.ground.ignoresSafeArea()
       HStack(spacing: 0) {
         roster
-        Divider().opacity(0.15)
+        Rectangle().fill(Palette.hairline).frame(width: 1)
         detail
       }
     }
@@ -44,44 +47,20 @@ struct MonitorView: View {
     .sheet(isPresented: $picking) { landingPicker }
   }
 
-  // MARK: Ground
-
-  /// A near-black ground with a single cool wash. Glass needs something behind
-  /// it with structure — over a flat fill it reads as a grey rectangle, which
-  /// is the whole material wasted.
-  private var background: some View {
-    LinearGradient(
-      colors: [
-        Color(red: 0.03, green: 0.04, blue: 0.06),
-        Color(red: 0.06, green: 0.08, blue: 0.12),
-        Color(red: 0.02, green: 0.03, blue: 0.05),
-      ],
-      startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    .overlay(alignment: .top) {
-      Ellipse()
-        .fill(Color(red: 0.20, green: 0.45, blue: 0.75).opacity(0.28))
-        .frame(width: 780, height: 320)
-        .blur(radius: 140)
-        .offset(y: -150)
-    }
-    .ignoresSafeArea()
-  }
-
   // MARK: Roster
 
   private var roster: some View {
-    GlassEffectContainer(spacing: 14) {
-      VStack(alignment: .leading, spacing: 14) {
+    GlassEffectContainer(spacing: 10) {
+      VStack(alignment: .leading, spacing: 16) {
         Text("FLEET")
-          .font(.system(size: 10, weight: .semibold, design: .monospaced))
-          .tracking(2.2)
-          .foregroundStyle(.white.opacity(0.35))
+          .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+          .tracking(2.4)
+          .foregroundStyle(Palette.faint)
 
         aggregate
 
         ScrollView {
-          VStack(spacing: 8) {
+          VStack(spacing: 6) {
             ForEach(nodes) { node in
               RosterRow(node: node, landed: node.host == focused?.host)
                 .onTapGesture { land(on: node) }
@@ -92,23 +71,37 @@ struct MonitorView: View {
       }
       .padding(20)
     }
-    .frame(width: 300)
+    .frame(width: 292)
   }
 
   private var aggregate: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(fleetThroughput > 0 ? String(format: "%.0f", fleetThroughput) : "—")
-        .font(.system(size: 46, weight: .medium, design: .monospaced))
-        .foregroundStyle(fleetThroughput > 0 ? Color(red: 0.42, green: 0.95, blue: 0.62) : .white.opacity(0.5))
+    VStack(alignment: .leading, spacing: 5) {
+      Text(throughput > 0 ? String(format: "%.0f", throughput) : "—")
+        .font(.system(size: 44, weight: .light, design: .monospaced))
+        .foregroundStyle(throughput > 0 ? Palette.live : Palette.faint)
         .contentTransition(.numericText())
-        .animation(.smooth(duration: 0.5), value: fleetThroughput)
-      Text(working > 0 ? "tokens/sec · \(working) working" : "tokens/sec · idle")
-        .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.4))
+        .animation(.smooth(duration: 0.45), value: throughput)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+
+      HStack(spacing: 5) {
+        Text("tokens/sec")
+          .font(.system(size: 10, design: .monospaced))
+          .foregroundStyle(Palette.dim)
+        if down > 0 {
+          Text("· \(down) down")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(Palette.fault)
+        } else if working > 0 {
+          Text("· \(working) working")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(Palette.dim)
+        }
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(16)
-    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    .glassEffect(.regular, in: .rect(cornerRadius: 14))
   }
 
   // MARK: Detail
@@ -116,74 +109,74 @@ struct MonitorView: View {
   @ViewBuilder
   private var detail: some View {
     if let node = focused {
-      GlassEffectContainer(spacing: 16) {
-        VStack(alignment: .leading, spacing: 18) {
-          header(node)
-          LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 168), spacing: 14)], spacing: 14
-          ) {
-            Readout("throughput", node.throughput.map { String(format: "%.0f", $0) } ?? "—", "tok/s")
-            Readout("in flight", "\(node.inFlight ?? 0)", "requests")
-            Readout("thermal", node.thermal ?? "—", node.power ?? "")
-            Readout(
-              "memory",
-              node.footprintGiB.map { String(format: "%.1f", $0) } ?? "—",
-              node.memoryGiB.map { String(format: "of %.0f GB", $0) } ?? ""
-            )
-          }
-          Spacer()
+      VStack(alignment: .leading, spacing: 20) {
+        header(node)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 158), spacing: 12)], spacing: 12) {
+          Readout("throughput", node.throughput.map { String(format: "%.0f", $0) } ?? "—",
+                  "tok/s", tint: (node.throughput ?? 0) > 0 ? Palette.live : nil)
+          Readout("in flight", "\(node.inFlight ?? 0)", "requests")
+          Readout("thermal", (node.thermal ?? "—").lowercased(), node.power ?? "",
+                  tint: node.isNoteworthy ? node.signal : nil)
+          Readout("memory", node.footprintGiB.map { String(format: "%.1f", $0) } ?? "—",
+                  node.memoryGiB.map { String(format: "of %.0f GB", $0) } ?? "")
         }
-        .padding(28)
+        Spacer()
       }
+      .padding(28)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     } else {
       Text("no node")
-        .font(.system(size: 12, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.3))
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(Palette.faint)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
 
   private func header(_ node: FleetNode) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 10) {
-        Circle()
-          .fill(node.state == .reachable ? Color(red: 0.42, green: 0.95, blue: 0.62) : .white.opacity(0.25))
-          .frame(width: 7, height: 7)
+    HStack(spacing: 12) {
+      Circle().fill(node.signal).frame(width: 7, height: 7)
+      VStack(alignment: .leading, spacing: 3) {
         Text(node.label)
-          .font(.system(size: 26, weight: .medium))
-          .foregroundStyle(.white)
+          .font(.system(size: 24, weight: .medium))
+          .foregroundStyle(Palette.ink)
+        Text([node.hardware, node.model?.split(separator: "/").last.map(String.init)]
+          .compactMap { $0 }.joined(separator: "  ·  "))
+          .font(.system(size: 10.5, design: .monospaced))
+          .foregroundStyle(Palette.dim)
       }
-      Text([node.hardware, node.model?.split(separator: "/").last.map(String.init)]
-        .compactMap { $0 }.joined(separator: "  ·  "))
-        .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.4))
+      Spacer()
     }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+    .glassEffect(.regular, in: .rect(cornerRadius: 14))
   }
 
   // MARK: Landing
 
   private var landingPicker: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Land on")
-        .font(.system(size: 20, weight: .medium))
-        .foregroundStyle(.white)
-      Text("The node this window opens to. Change it any time from the roster.")
-        .font(.system(size: 12))
-        .foregroundStyle(.white.opacity(0.45))
-      ScrollView {
-        VStack(spacing: 8) {
-          ForEach(nodes) { node in
-            RosterRow(node: node, landed: false)
-              .onTapGesture { land(on: node); picking = false }
+    ZStack {
+      Color.black.ignoresSafeArea()
+      VStack(alignment: .leading, spacing: 14) {
+        Text("Land on")
+          .font(.system(size: 19, weight: .medium))
+          .foregroundStyle(Palette.ink)
+        Text("The node this window opens to. Change it any time from the roster.")
+          .font(.system(size: 11.5))
+          .foregroundStyle(Palette.dim)
+        ScrollView {
+          VStack(spacing: 6) {
+            ForEach(nodes) { node in
+              RosterRow(node: node, landed: false)
+                .onTapGesture { land(on: node); picking = false }
+            }
           }
         }
+        .frame(height: 236)
+        .scrollIndicators(.never)
       }
-      .frame(height: 240)
+      .padding(24)
     }
-    .padding(24)
-    .frame(width: 380)
-    .background(Color(red: 0.04, green: 0.05, blue: 0.08))
+    .frame(width: 370)
   }
 
   private func land(on node: FleetNode) {
@@ -199,65 +192,73 @@ private struct RosterRow: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      Circle()
-        .fill(node.state == .reachable
-          ? ((node.inFlight ?? 0) > 0 ? Color(red: 0.42, green: 0.95, blue: 0.62) : .white.opacity(0.55))
-          : .white.opacity(0.18))
-        .frame(width: 6, height: 6)
-      VStack(alignment: .leading, spacing: 2) {
+      Circle().fill(node.signal).frame(width: 6, height: 6)
+      VStack(alignment: .leading, spacing: 1) {
         Text(node.label)
           .font(.system(size: 12, weight: .medium))
-          .foregroundStyle(.white.opacity(landed ? 1 : 0.75))
+          .foregroundStyle(Palette.ink.opacity(landed ? 1 : 0.72))
           .lineLimit(1)
         Text(node.hardware ?? node.host)
-          .font(.system(size: 9.5, design: .monospaced))
-          .foregroundStyle(.white.opacity(0.3))
+          .font(.system(size: 9, design: .monospaced))
+          .foregroundStyle(Palette.faint)
           .lineLimit(1)
       }
       Spacer(minLength: 4)
       if let rate = node.throughput, rate > 0 {
         Text(String(format: "%.0f", rate))
           .font(.system(size: 11, design: .monospaced))
-          .foregroundStyle(Color(red: 0.42, green: 0.95, blue: 0.62))
+          .foregroundStyle(Palette.live)
       }
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .glassEffect(landed ? .regular.tint(.white.opacity(0.10)) : .regular, in: .rect(cornerRadius: 11))
+    .padding(.vertical, 9)
+    // Tint only marks the landed row. A tint per state would put three colours
+    // of glass in one column and turn the roster into a chart of itself.
+    .glassEffect(landed ? .regular.tint(.white.opacity(0.09)) : .regular,
+                 in: .rect(cornerRadius: 10))
     .contentShape(.rect)
   }
 }
 
-/// One measurement.
+/// One measurement. No glass — these sit inside a detail pane that is already
+/// distinguished, and material here would compete with the header rather than
+/// support it.
 private struct Readout: View {
   let caption: String
   let value: String
   let unit: String
+  var tint: Color?
 
-  init(_ caption: String, _ value: String, _ unit: String) {
+  init(_ caption: String, _ value: String, _ unit: String, tint: Color? = nil) {
     self.caption = caption
     self.value = value
     self.unit = unit
+    self.tint = tint
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 7) {
       Text(caption.uppercased())
-        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-        .tracking(1.4)
-        .foregroundStyle(.white.opacity(0.32))
+        .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+        .tracking(1.5)
+        .foregroundStyle(Palette.faint)
       Text(value)
-        .font(.system(size: 27, weight: .medium, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.92))
+        .font(.system(size: 25, weight: .light, design: .monospaced))
+        .foregroundStyle(tint ?? Palette.ink.opacity(0.88))
         .contentTransition(.numericText())
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
       if !unit.isEmpty {
         Text(unit)
-          .font(.system(size: 10, design: .monospaced))
-          .foregroundStyle(.white.opacity(0.35))
+          .font(.system(size: 9.5, design: .monospaced))
+          .foregroundStyle(Palette.faint)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(16)
-    .glassEffect(.regular, in: .rect(cornerRadius: 14))
+    .padding(15)
+    .background(
+      RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.022))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.hairline, lineWidth: 1))
+    )
   }
 }
