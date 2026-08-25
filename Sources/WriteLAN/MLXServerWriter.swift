@@ -33,6 +33,21 @@ public struct MLXServerWriter: DeviceWriter {
     self.limits = limits
   }
 
+  /// A dedicated session, because `URLSession.shared` caps `httpMaximumConnectionsPerHost`
+  /// at 6 — and that cap silently became the node's throughput ceiling. The
+  /// backing `mlx_lm.server` batches concurrent decodes (one weight read feeds
+  /// the whole batch), so it returns 554 tok/s at 32 concurrent requests but
+  /// only ~300 when six may be in flight. The agent was throttling the very
+  /// batching it exists to expose. 64 is comfortably above the server's
+  /// `--decode-concurrency`, so the ceiling is the model, not the plumbing.
+  private static let session: URLSession = {
+    let config = URLSessionConfiguration.default
+    config.httpMaximumConnectionsPerHost = 64
+    config.timeoutIntervalForRequest = 300
+    config.timeoutIntervalForResource = 600
+    return URLSession(configuration: config)
+  }()
+
   public func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
     guard prompt.count <= limits.maxInputCharacters else {
       throw LANError.promptOverLimit(prompt.count)
@@ -51,7 +66,7 @@ public struct MLXServerWriter: DeviceWriter {
       "stream": false,
     ])
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await Self.session.data(for: request)
     guard (response as? HTTPURLResponse)?.statusCode == 200 else {
       throw LANError.ollama(String(data: data, encoding: .utf8) ?? "no body")
     }
