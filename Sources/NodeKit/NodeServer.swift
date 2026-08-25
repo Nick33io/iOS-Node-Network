@@ -77,6 +77,33 @@
       self.describe = describe
     }
 
+    /// Recent completions, for the rolling throughput figure.
+    private var recent: [(at: Date, tokens: Int)] = []
+
+    /// Tokens per second this node is actually producing, over the last 10s.
+    ///
+    /// Not `lastTokensPerSecond`, which is one request's rate. Under
+    /// concurrency a node runs many requests at once — its aggregate is
+    /// roughly five times any single request's rate at eight streams — so
+    /// summing per-request rates across a fleet understates it badly. The
+    /// watch read 73 tok/s against a measured 400.
+    var throughput: Double {
+      // Divide by the window, not by the age of its oldest entry. Dividing by
+      // the age was wrong in exactly the case that matters: completions arrive
+      // in bursts, so after a quiet stretch the oldest entry in the window can
+      // be a fraction of a second old, and a whole batch of tokens over 0.3s
+      // reported twenty times the real rate.
+      let window = 10.0
+      let cutoff = Date().addingTimeInterval(-window)
+      let tokens = recent.filter { $0.at >= cutoff }.reduce(0) { $0 + $1.tokens }
+      return Double(tokens) / window
+    }
+
+    private func trimRecent() {
+      let cutoff = Date().addingTimeInterval(-30)
+      recent.removeAll { $0.at < cutoff }
+    }
+
     private var fetchModel: (@MainActor () async throws -> Void)?
     private var fetching = false
     private var fetchError: String?
@@ -220,7 +247,10 @@
     case ("GET", "/health"):
         // Fetch state rides on /health so a caller can tell "still downloading"
         // from "refusing work", which otherwise look identical from outside.
+        trimRecent()
         var payload = describe()
+        // What this node is producing now, not what one request managed.
+        payload["throughput"] = throughput
         payload["fetching"] = fetching
         if let fetchError { payload["fetchError"] = fetchError }
         send(json: payload, status: "200 OK", on: connection)
@@ -242,19 +272,19 @@
         do {
           let writer = try await makeWriter()
           let started = Date()
-          let text = try await writer.generate(
+          let result = try await writer.generateDetailed(
             prompt: generate.prompt, maxOutputTokens: generate.maxOutputTokens
           )
+          let text = result.text
           let seconds = -started.timeIntervalSinceNow
           let characters = text.trimmingCharacters(in: .whitespacesAndNewlines).count
-          // Character-derived because the tokenizer is not exposed through
-          // DeviceWriter. Close enough to compare devices to each other, which
-          // is the only comparison this number is used for.
-          let tokens = max(1, characters / 4)
-          // Record what this node just did, so /health can answer "how fast
-          // are you" without the caller running a benchmark of its own.
+          // The backend's own count when it has one. The character estimate is
+          // the fallback and it is wrong: measured 5.4 characters per token,
+          // not the 4 assumed here, so it reads about a third high.
+          let tokens = result.tokens ?? max(1, characters / 4)
           let rate = seconds > 0 ? Double(tokens) / seconds : 0
           lastTokensPerSecond = rate
+          recent.append((Date(), tokens))
           tokensServed += tokens
           completed += 1
           send(

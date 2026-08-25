@@ -48,7 +48,22 @@ public struct MLXServerWriter: DeviceWriter {
     return URLSession(configuration: config)
   }()
 
+  public func generateDetailed(
+    prompt: String, maxOutputTokens: Int
+  ) async throws -> Generation {
+    let (text, tokens) = try await complete(prompt: prompt, maxOutputTokens: maxOutputTokens)
+    return Generation(text: text, tokens: tokens)
+  }
+
   public func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
+    try await complete(prompt: prompt, maxOutputTokens: maxOutputTokens).text
+  }
+
+  /// The completion plus the server's own token count, which is the only
+  /// honest one available — character-derived estimates read about a third high.
+  private func complete(
+    prompt: String, maxOutputTokens: Int
+  ) async throws -> (text: String, tokens: Int?) {
     guard prompt.count <= limits.maxInputCharacters else {
       throw LANError.promptOverLimit(prompt.count)
     }
@@ -80,7 +95,8 @@ public struct MLXServerWriter: DeviceWriter {
     // Qwen3 emits reasoning in <think> blocks. Stripping them here keeps the
     // block out of section prose, where it would otherwise reach the verifier
     // as content and be counted toward the length budget.
-    return Self.stripThinking(text)
+    let usage = envelope["usage"] as? [String: Any]
+    return (Self.stripThinking(text), usage?["completion_tokens"] as? Int)
   }
 
   /// Removes `<think>…</think>` spans, including an unterminated trailing one.

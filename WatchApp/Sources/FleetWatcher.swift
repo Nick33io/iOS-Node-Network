@@ -33,10 +33,15 @@ final class FleetWatcher {
   /// they do not survive sustained load — iOS suspends or kills the node app —
   /// so including them adds churn to the reading without adding signal. This
   /// display answers "is the fleet working", and the Macs are the fleet.
+  /// Both forms for each Mac: the mDNS name survives a DHCP lease change, the
+  /// raw address survives mDNS not resolving. A watch reaches the network
+  /// through its paired iPhone over Bluetooth, and `.local` lookups across that
+  /// link are slow enough to be unreliable — so neither form alone is safe, and
+  /// a duplicate hit costs one extra request every two seconds.
   var hosts = [
-    "Nicholass-MacBook-Pro-2.local",  // M5 Max
-    "NicX-Mini.local",                // Mac mini M4 Pro
-    "33io-backend.local",             // MacBook Air M3
+    "Nicholass-MacBook-Pro-2.local", "192.168.1.218",  // M5 Max
+    "NicX-Mini.local", "192.168.1.196",                // Mac mini M4 Pro
+    "33io-backend.local", "192.168.1.117",             // MacBook Air M3
   ]
 
   private var pollTask: Task<Void, Never>?
@@ -68,22 +73,29 @@ final class FleetWatcher {
         group.addTask {
           guard let url = URL(string: "http://\(host):8833/health") else { return nil }
           var request = URLRequest(url: url)
-          request.timeoutInterval = 3
+          // 3s was too tight. The request leaves the watch, crosses Bluetooth
+          // to the phone, then the LAN — and if the host is an mDNS name the
+          // lookup happens over that same hop. Every probe timed out and the
+          // display sat at "no fleet" through a fully loaded fleet.
+          request.timeoutInterval = 8
           guard let (data, _) = try? await URLSession.shared.data(for: request),
             let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let capabilities = payload["capabilities"] as? [String: Any]
           else { return nil }
-          return (
-            capabilities["inFlight"] as? Int ?? 0,
-            capabilities["tokensPerSecond"] as? Double ?? 0
-          )
+          // `throughput` is the node's rolling 10s aggregate; the older
+          // `tokensPerSecond` is one request's rate and summing those across a
+          // fleet understated it fivefold — the wrist read 73 tok/s while the
+          // fleet was measured at 400.
+          let payloadRate = (payload["throughput"] as? Double)
+            ?? (capabilities["tokensPerSecond"] as? Double ?? 0)
+          return (capabilities["inFlight"] as? Int ?? 0, payloadRate)
         }
       }
       for await result in group {
         guard let (flight, nodeRate) = result else { continue }
         reachable += 1
         inFlight += flight
-        if flight > 0 { rate += nodeRate }
+        rate += nodeRate
       }
     }
 

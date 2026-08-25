@@ -16,8 +16,11 @@ struct PulseView: View {
             .font(.system(.body, design: .monospaced).weight(.semibold))
             .foregroundStyle(Color(red: 0.45, green: 0.98, blue: 0.6))
             .transition(.opacity)
-        } else if watcher.reachableNodes == 0 {
-          Text("no fleet")
+        } else {
+          // Always show the count, not just the zero case. "no fleet" alone
+          // cannot distinguish a quiet fleet from an unreachable one, which is
+          // exactly the ambiguity that hid a total polling failure.
+          Text(watcher.reachableNodes == 0 ? "no fleet" : "\(watcher.reachableNodes) idle")
             .font(.system(.caption2, design: .monospaced))
             .foregroundStyle(.secondary)
         }
