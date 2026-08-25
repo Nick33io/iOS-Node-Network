@@ -136,6 +136,7 @@ struct ManagerView: View {
         // Serve by default: a manager that has to be told to contribute is a
         // manager that mostly does not.
         ensureServer().start()
+        UserDefaults.standard.set(true, forKey: "node.wasServing")
         // Serving unattended is the whole point of a docked tablet, and the
         // idle timer is what makes it possible. Pinning it here is also what
         // promotes this node to permanent while it is on power.
@@ -263,6 +264,7 @@ struct ManagerView: View {
             server?.stop()
           } else {
             ensureServer().start()
+        UserDefaults.standard.set(true, forKey: "node.wasServing")
           }
         }
         .font(.system(.caption, design: .monospaced).weight(.semibold))

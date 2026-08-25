@@ -4,6 +4,9 @@ import UIKit
 import WriteCore
 
 struct RootView: View {
+  /// Remembers that this node was serving, so it resumes after a relaunch.
+  private static let wasServingKey = "node.wasServing"
+
   @State private var model = RunModel()
   @State private var profile = DeviceProfile.current()
   @State private var mesh = MeshPresence()
@@ -82,6 +85,15 @@ struct RootView: View {
     .tint(.white)
     .task {
       telemetry.start { server?.servedBytes ?? 0 }
+      // Resume serving if this node was serving before. Every deploy relaunches
+      // the app, and an iOS node also dies whenever it is backgrounded — so
+      // without this the operator has to re-tap LISTEN after every update and
+      // every accidental app switch, and a node that was meant to be in the
+      // fleet is silently absent from it.
+      if UserDefaults.standard.bool(forKey: Self.wasServingKey) {
+        ensureServer().start()
+        screen.hold()
+      }
       // Test hook: lets a harness exercise a full run without driving the UI.
       guard ProcessInfo.processInfo.arguments.contains("-autorun") else { return }
       await model.run()
@@ -217,11 +229,13 @@ struct RootView: View {
         Button(server?.isListening == true ? "STOP" : "LISTEN") {
           if server?.isListening == true {
             server?.stop()
+            UserDefaults.standard.set(false, forKey: Self.wasServingKey)
           } else {
             ensureServer().start()
             // A listener dies the moment iOS suspends the app, so serving and
             // holding the screen are the same decision.
             screen.hold()
+            UserDefaults.standard.set(true, forKey: Self.wasServingKey)
           }
         }
         .font(.system(.caption, design: .monospaced).weight(.semibold))
