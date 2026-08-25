@@ -148,3 +148,21 @@ targets:
         # plist looked permissive.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+
+# Declared explicitly: xcodegen stopped auto-generating per-target schemes at
+# some point in this project's life, and xcodebuild cannot address a target's
+# signed device build without one. Explicit is also versioned — the schemes
+# can no longer silently vanish.
+schemes:
+  NodeNetwork:
+    build:
+      targets:
+        NodeNetwork: all
+    run:
+      config: Debug
+  NodeWatch:
+    build:
+      targets:
+        NodeWatch: all
+    run:
+      config: Debug
