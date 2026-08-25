@@ -26,6 +26,39 @@ packages:
     exactVersion: 1.3.3
 
 targets:
+  # The fleet on the wrist. Watch-only on purpose: watchOS cannot run a model
+  # or join the tailnet, so this is a display — it polls the LAN nodes over
+  # Wi-Fi and shows whether the fleet is working. Standalone (not embedded in
+  # the iOS app) so it installs and iterates without touching the phone build.
+  NodeWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: ../WatchApp/Sources
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.thirtythree.nodewatch
+        DEVELOPMENT_TEAM: VG8M5G3FF6
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        INFOPLIST_KEY_WKWatchOnly: YES
+        INFOPLIST_KEY_CFBundleDisplayName: NOD3 Pulse
+    info:
+      path: WatchInfo.plist
+      properties:
+        WKWatchOnly: true
+        # Cleartext to the fleet's LAN nodes, same posture as the iOS app: an
+        # internal tool talking to machines the owner controls.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: >-
+          Reads fleet status from NOD3 nodes on your network.
+
   NodeNetwork:
     type: application
     platform: iOS
