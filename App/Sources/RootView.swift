@@ -14,7 +14,6 @@ struct RootView: View {
   /// Resting state while joined. Tapping the rain reveals the console; tapping
   /// the thumbnail puts it back.
   @State private var showingConsole = false
-  @State private var ambient = AmbientDisplay()
   @State private var telemetry = NodeTelemetry()
   @State private var models = ModelStore()
   @State private var screen = ScreenKeeper()
@@ -23,21 +22,10 @@ struct RootView: View {
   #endif
   /// Whether the console shows instruments or the text produced so far.
   @State private var showingOutput = false
-  #if canImport(AVFoundation) && !targetEnvironment(simulator)
-    @State private var camera = CameraGlyphSource()
-  #endif
 
   var body: some View {
     ZStack {
-      if !showingConsole && currentFrame.columns > 0 {
-        // A live signal beats a synthetic one: if a camera is feeding the
-        // fleet, that is what the ambient screen should show.
-        GlyphFieldView(frame: currentFrame)
-          .transition(.opacity)
-          .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showingConsole = true } }
-          .accessibilityAddTraits(.isButton)
-          .accessibilityLabel("Ambient camera display. Double tap to open the console.")
-      } else if mesh.isJoined && !showingConsole {
+      if mesh.isJoined && !showingConsole {
         GeometryReader { proxy in
           MatrixRain(scale: MatrixRain.fitting(proxy.size))
         }
@@ -72,7 +60,6 @@ struct RootView: View {
           if showingOutput {
             outputSection
           }
-          ambientSection
           serverSection
           meshSection
         }
@@ -98,87 +85,6 @@ struct RootView: View {
       guard ProcessInfo.processInfo.arguments.contains("-autorun") else { return }
       await model.run()
     }
-  }
-
-  /// Whichever frame this device should be showing — its own camera when it is
-  /// the source, the followed node's otherwise.
-  private var currentFrame: GlyphFrame {
-    #if canImport(AVFoundation) && !targetEnvironment(simulator)
-      if camera.isRunning { return camera.frame }
-    #endif
-    return ambient.frame
-  }
-
-  // MARK: Ambient
-
-  private var ambientSection: some View {
-    Panel(heading: "AMBIENT") {
-      Row(key: "role", value: ambientLabel, tint: ambientTint)
-      if currentFrame.columns > 0 {
-        Row(key: "grid", value: "\(currentFrame.columns)x\(currentFrame.rows)")
-        Row(key: "frame", value: "\(currentFrame.sequence)")
-      }
-      if let failure = ambient.lastError {
-        Text(failure)
-          .font(.system(.caption2, design: .monospaced))
-          .foregroundStyle(.red)
-          .lineLimit(2)
-      }
-      HStack {
-        Text("screen must stay awake — iOS suspends locked apps")
-          .font(.system(.caption2, design: .monospaced))
-          .foregroundStyle(.tertiary)
-        Spacer()
-        Button(cameraRunning ? "STOP CAM" : "CAMERA") {
-          Task { await toggleCamera() }
-        }
-        .font(.system(.caption, design: .monospaced).weight(.semibold))
-      }
-      .padding(.top, 6)
-    }
-  }
-
-  private var cameraRunning: Bool {
-    #if canImport(AVFoundation) && !targetEnvironment(simulator)
-      return camera.isRunning
-    #else
-      return false
-    #endif
-  }
-
-  private var ambientLabel: String {
-    if cameraRunning { return "source" }
-    switch ambient.role {
-    case .viewer(let host): return "viewing \(host)"
-    case .source: return "source"
-    case .idle: return "off"
-    }
-  }
-
-  private var ambientTint: Color {
-    cameraRunning || currentFrame.columns > 0 ? .green : .secondary
-  }
-
-  @MainActor
-  private func toggleCamera() async {
-    #if canImport(AVFoundation) && !targetEnvironment(simulator)
-      if camera.isRunning {
-        camera.stop()
-        // Stop pinning the screen awake the moment we stop needing it.
-        UIApplication.shared.isIdleTimerDisabled = false
-      } else {
-        await camera.start()
-        if camera.isRunning {
-          // An ambient display that lets the screen lock stops being one.
-          screen.hold()
-          ensureServer().start()
-          server?.provideGlyphs {
-            guard camera.frame.columns > 0 else { return nil }
-            return try? JSONEncoder().encode(camera.frame)
-          }
-        }
-      }
-    #endif
   }
 
   private func downloadModel(_ entry: ModelStore.Entry) async {

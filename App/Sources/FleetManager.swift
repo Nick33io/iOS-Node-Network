@@ -137,12 +137,24 @@ final class FleetManager {
       .map { ($0.label, $0.host) }
   }
 
+  /// Addresses dropped from the catalogue that should also leave any roster
+  /// already saved on a device.
+  ///
+  /// Removing an entry from `KnownNodes` stops it being offered, but does
+  /// nothing about rosters persisted before the change — those keep probing a
+  /// host that has been gone for months and reporting it as a fleet fault.
+  private static let retiredHosts: Set<String> = [
+    "100.114.110.90"  // 33io-backend, superseded by 33io-backend-1
+  ]
+
   private static func loadRoster() -> [FleetNode] {
     if let stored = UserDefaults.standard.array(forKey: rosterKey) as? [[String: String]],
       !stored.isEmpty
     {
       return stored.compactMap { entry in
-        guard let label = entry["label"], let host = entry["host"] else { return nil }
+        guard let label = entry["label"], let host = entry["host"],
+          !retiredHosts.contains(host)
+        else { return nil }
         return FleetNode(id: host, label: label, host: host)
       }
     }
