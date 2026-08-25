@@ -74,12 +74,21 @@ import Foundation
         }
         return LANWriter(model: options.model ?? "", baseURL: base, limits: options.limits)
       case .mlx:
-        #if canImport(MLXLLM)
-          // Deliberately unreached in the SwiftPM build; see AgentError.mlxUnavailable.
-          throw AgentError.mlxUnavailable
-        #else
-          throw AgentError.mlxUnavailable
-        #endif
+        // Runs the same mlx-community weights the phones do, through MLX on
+        // this machine's GPU — served by mlx_lm.server on the loopback rather
+        // than Swift bindings, because mlx-swift-lm cannot go in Package.swift
+        // without putting an Apple-GPU dependency in front of the Linux build.
+        //
+        // The distinction that matters to the fleet is the runtime, not the
+        // language binding: this is genuinely local MLX inference, so a
+        // throughput comparison against a phone measures hardware rather than
+        // two different engines.
+        guard let model = options.model else { throw AgentError.modelRequired }
+        return MLXServerWriter(
+          model: model,
+          baseURL: URL(string: "http://\(options.ollamaHost):8081")!,
+          limits: options.limits
+        )
       }
     }
 
