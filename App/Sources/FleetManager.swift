@@ -293,6 +293,15 @@ final class FleetManager {
         screenHeldAwake: awake,
         padClass: profile.padClass
       )
+      // The two rows every probed card shows and this one omitted: the model
+      // this device serves and the runtime behind it. Their absence made the
+      // self card visibly shorter than its neighbours in the tier grid — a
+      // mismatch that read as a fault. Both are facts the device knows about
+      // itself: the policy names the model it selected, and on-device MLX is
+      // the backend that selection serves through — the same pair its own
+      // /health advertises to every other manager.
+      updated.model = MLXPolicy.allowedModel
+      updated.backend = "on-device MLX"
       updated.tokensPerSecond = node.tokensPerSecond
       updated.state = .reachable
       updated.probeMilliseconds = 0
