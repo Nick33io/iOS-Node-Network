@@ -288,7 +288,11 @@ final class FleetManager {
       #else
         let awake = true
       #endif
-      updated.tier = NodeTier.current(onMains: profile.power.isExternal, screenHeldAwake: awake)
+      updated.tier = NodeTier.current(
+        onMains: profile.power.isExternal,
+        screenHeldAwake: awake,
+        padClass: profile.padClass
+      )
       updated.tokensPerSecond = node.tokensPerSecond
       updated.state = .reachable
       updated.probeMilliseconds = 0

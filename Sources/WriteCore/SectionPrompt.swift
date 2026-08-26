@@ -26,12 +26,8 @@ public struct SectionPromptBuilder: Sendable {
     You write one section of a longer document. Write only that section's prose.
     Do not restate the heading, do not add a preamble, and do not write any
     other section. Use every required detail exactly as given; never invent
-    names, figures, or dates that are not supplied.
-
-    The labelled lines below are instructions to you, not material to reproduce.
-    Do not copy the COVER or MUST APPEAR VERBATIM lists into your answer as a
-    list, do not state the word count, and do not emit any section marker. Emit
-    prose paragraphs and nothing else.
+    names, figures, or dates that are not supplied. These instructions are not
+    material: no lists, no word counts, no markers - prose paragraphs only.
     """
 
   /// - Parameters:
@@ -60,12 +56,12 @@ public struct SectionPromptBuilder: Sendable {
       // sections came back opening with bare fragments of these very points
       // ("shooting days") before any prose. Prose in, prose out.
       let points = section.points.joined(separator: "; ")
-      body += "\n\nCover these points in your prose: \(points)."
+      body += "\n\nCover in your prose: \(points)."
     }
 
     if !required.isEmpty {
       let values = required.joined(separator: "; ")
-      body += "\n\nThese values must appear word for word inside your prose: \(values)."
+      body += "\n\nInclude word for word: \(values)."
     }
 
     let fixed = head + body

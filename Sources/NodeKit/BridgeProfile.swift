@@ -108,7 +108,8 @@
       let profile = DeviceProfile.current()
       let tier = NodeTier.current(
         onMains: profile.power.isExternal,
-        screenHeldAwake: screenHeldAwake
+        screenHeldAwake: screenHeldAwake,
+        padClass: profile.padClass
       )
       return [
         "schema": schema,

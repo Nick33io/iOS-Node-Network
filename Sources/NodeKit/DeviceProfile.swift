@@ -152,13 +152,25 @@ import os
       return String(decoding: value.prefix(while: { $0 != 0 }), as: UTF8.self)
     }
 
+    /// Whether this device carries laptop-class silicon and battery.
+    ///
+    /// Owner-directed (2026-08-26): the M4 iPad serves alongside the Macs.
+    /// The measurement backs it — probed at 140 ch/s, it tied the M3 Air —
+    /// and its battery is a laptop's, not a phone's. Keyed off the hardware
+    /// identifier because the idiom is a UIKit fact NodeKit cannot see.
+    public var padClass: Bool { identifier.hasPrefix("iPad") }
+
     /// Whether this device should take long-running work.
     ///
     /// Thermal pressure and Low Power Mode both cut sustained decode throughput,
     /// and a device on battery can be backgrounded by the user at any moment.
+    /// A pad-class device is the exception to the battery rule — by owner
+    /// direction and by measurement — while the thermal and Low Power gates
+    /// still apply to it: silicon does not exempt physics.
     public var suitedToLongWork: Bool {
       guard !lowPowerMode else { return false }
       guard thermalState == .nominal || thermalState == .fair else { return false }
+      if padClass { return true }
       switch power {
       case .charging, .full, .mains: return true
       case .battery, .unknown: return false

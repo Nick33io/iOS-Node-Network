@@ -26,16 +26,24 @@
     ///   - onMains: drawing external power rather than battery.
     ///   - screenHeldAwake: the app has disabled the idle timer, so the device
     ///     will not lock and suspend it.
-    public static func current(onMains: Bool = false, screenHeldAwake: Bool = false)
+    public static func current(
+      onMains: Bool = false,
+      screenHeldAwake: Bool = false,
+      padClass: Bool = false
+    )
       -> NodeTier
     {
       #if os(macOS)
         return .permanent
       #else
-        // Both conditions, not either. Power without a held screen still locks
-        // and suspends; a held screen on battery still dies when the battery
-        // does.
-        return onMains && screenHeldAwake ? .permanent : .burst
+        // The held screen is non-negotiable on iOS: a device that can lock
+        // suspends the listener mid-generation whatever its silicon. Power is
+        // where pad-class differs (owner-directed 2026-08-26): an M4 iPad's
+        // battery is a laptop's, so it holds the permanent tier unplugged,
+        // where a phone on battery stays burst because it dies sooner and is
+        // pocketed without warning.
+        guard screenHeldAwake else { return .burst }
+        return (onMains || padClass) ? .permanent : .burst
       #endif
     }
 

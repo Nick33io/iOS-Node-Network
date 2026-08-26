@@ -27,8 +27,13 @@ final class SectionPromptTests: XCTestCase {
 
   func testContinuityIsDroppedRatherThanOverflowing() throws {
     let builder = SectionPromptBuilder(limits: limits, continuityBudget: 4000)
+    // The intent is sized to leave the base prompt just under the budget so
+    // only the continuity has to be sacrificed. It is sized RELATIVE to the
+    // builder's fixed instruction text: when that text grew by ~90 characters
+    // (the anti-echo rewrite), the old 380-repetition intent overflowed the
+    // base itself and this test failed for the wrong reason.
     let spec = SectionSpec(
-      id: "s1", heading: "Overview", intent: String(repeating: "detail ", count: 380),
+      id: "s1", heading: "Overview", intent: String(repeating: "detail ", count: 370),
       points: [], mustInclude: [], targetWords: 200
     )
     let prompt = try builder.prompt(for: spec, previousTail: String(repeating: "tail ", count: 400))
