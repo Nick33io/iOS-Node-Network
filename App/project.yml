@@ -192,6 +192,17 @@ targets:
         product: NodeKit
       - target: NodeMonitorWidgets
         embed: true
+    info:
+      path: MonitorInfo.plist
+      properties:
+        # Cleartext to the fleet's nodes, the same posture as the iOS app and
+        # the watch: an internal tool talking to machines the owner controls.
+        # Without this, macOS ATS silently refused every probe and the monitor
+        # showed the whole fleet down while the fleet was fine — the display
+        # lied by omission, which is the exact failure this repo exists to
+        # avoid.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -234,6 +245,8 @@ targets:
     info:
       path: MonitorWidgets.plist
       properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
@@ -263,6 +276,8 @@ targets:
     info:
       path: NetworkWidgets.plist
       properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
