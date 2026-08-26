@@ -280,6 +280,15 @@ struct ManagerView: View {
     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
   }
 
+  /// The self node with its meter fed from local serving stats. Only fills
+  /// an empty meter — a measured benchmark, when one exists, stays.
+  private static func withSelfRate(_ node: FleetNode, rate: Double) -> FleetNode {
+    guard node.tokensPerSecond == nil, rate > 0 else { return node }
+    var filled = node
+    filled.tokensPerSecond = rate
+    return filled
+  }
+
   /// Live rate while serving, falling back to this device's own benchmark so
   /// the meter reads something before anyone has dispatched work here.
   private var selfRate: Double {
@@ -375,7 +384,12 @@ struct ManagerView: View {
         LazyVGrid(columns: columns, spacing: 16) {
           ForEach(members) { node in
             NodeCard(
-              node: node,
+              // The self card's rate comes from this device's own serving
+              // stats — the one node a probe cannot measure, because it
+              // answers locally and never asks itself. Every other card's
+              // meter is probe-fed; without this the iPad's own module read
+              // "unmeasured" forever while it was serving turns.
+              node: node.isSelf ? Self.withSelfRate(node, rate: selfRate) : node,
               refresh: { Task { await fleet.refresh(node) } },
               measure: { Task { await fleet.measure(node) } },
               testLink: { Task { await fleet.testLink(node) } },
