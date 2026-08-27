@@ -64,13 +64,19 @@ struct ParticleField: View {
       : 0
 
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    // Excitement blows the cloud outward a little, so the whole field reads
-    // as energised rather than just recoloured.
-    let cloudRadius = min(size.width, size.height) * (0.42 + 0.10 * excitement)
+    /*
+     * Excitement moves the cloud COHERENTLY: it swells, and it spins. That
+     * distinction is the whole feel of it. The first attempt also widened
+     * each particle's own breathing and drove it seven times faster, and
+     * fourteen hundred grains jittering on random phases reads as static —
+     * noise, not speed. Everything below moves the whole cloud together.
+     */
+    let swell = 0.42 + 0.06 * excitement + 0.02 * excitement * sin(time * 1.6)
+    let cloudRadius = min(size.width, size.height) * swell
 
     // Slow tumble: a steady spin with a lazy precession, like the reference.
-    // The crown drives it far faster while it is turning.
-    let spin = time * (0.14 + 2.6 * excitement)
+    // The crown winds that same spin up rather than adding motion of its own.
+    let spin = time * (0.14 + 2.2 * excitement)
     let tilt = 0.45 + 0.18 * sin(time * 0.05)
 
     // Touch influence decays over 1.1 s after the finger lifts.
@@ -109,12 +115,12 @@ struct ParticleField: View {
       var py = radius * cosPhi
       var pz = radius * sinPhi * sin(theta)
 
-      // Per-particle breathing so the dust never sits still. Excitement
-      // widens the breath into a genuine jitter.
-      let breath = 0.03 + 0.09 * excitement
-      px += breath * sin(time * (0.7 + 6 * excitement) + seed * 2.1)
-      py += breath * sin(time * (0.9 + 6 * excitement) + seed * 1.3)
-      pz += breath * cos(time * (0.8 + 6 * excitement) + seed * 1.7)
+      // Per-particle breathing so the dust never sits still. Unchanged by
+      // excitement on purpose: this is the one motion with a random phase
+      // per grain, and scaling it is exactly what turned speed into noise.
+      px += 0.03 * sin(time * 0.7 + seed * 2.1)
+      py += 0.03 * sin(time * 0.9 + seed * 1.3)
+      pz += 0.03 * cos(time * 0.8 + seed * 1.7)
 
       // Tumble: rotate about Y (spin), then X (tilt).
       let x1 = px * cos(spin) + pz * sin(spin)
