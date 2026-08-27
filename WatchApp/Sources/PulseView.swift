@@ -10,6 +10,9 @@ struct PulseView: View {
   /// Rolling measure of how hard the dial is being turned, 0...1.
   @State private var crownEnergy: Double = 0
   @State private var crownEndedAt = Date.distantPast
+  /// The crown only reports to a view that actually holds focus, and
+  /// `.focusable()` alone does not grant it — this claims it on appear.
+  @FocusState private var crownFocused: Bool
 
   var body: some View {
     ZStack {
@@ -37,7 +40,12 @@ struct PulseView: View {
       .animation(.easeInOut(duration: 0.4), value: watcher.engaged)
     }
     .ignoresSafeArea()
-    .onAppear { watcher.start() }
+    .onAppear {
+      watcher.start()
+      // Claim the crown for the field: without focus the rotation binding
+      // never fires and the dial appears to do nothing at all.
+      crownFocused = true
+    }
     .onDisappear { watcher.stop() }
   }
 
@@ -60,22 +68,30 @@ struct PulseView: View {
        * field owns the ease-out: this only records how hard, and when last
        * — it never has to be told to stop.
        */
-      .focusable()
+      .focusable(true)
+      .focused($crownFocused)
       .digitalCrownRotation(
         $crown,
         from: -100_000,
         through: 100_000,
-        by: 0.01,
-        sensitivity: .high,
+        by: 1,
+        sensitivity: .medium,
         isContinuous: true,
-        isHapticFeedbackEnabled: false
+        isHapticFeedbackEnabled: true
       )
       .onChange(of: crown) { previous, current in
-        let travelled = abs(current - previous)
-        // Decay first, then add: holding still between ticks settles the
-        // cloud even while the crown still has focus.
-        crownEnergy = min(1, crownEnergy * 0.82 + travelled * 6)
-        crownEndedAt = Date()
+        // Rate, not distance: a detent is the same size however fast it
+        // arrives, so only the time between them says how hard the dial is
+        // being turned. The first change after a rest has no usable interval
+        // and is charged at a nominal one.
+        let now = Date()
+        let sinceLast = now.timeIntervalSince(crownEndedAt)
+        let interval = sinceLast > 0 && sinceLast < 0.5 ? sinceLast : 0.06
+        let speed = abs(current - previous) / interval
+        // A brisk turn runs a few detents a second; normalise there so an
+        // ordinary flick reaches full neon rather than a hint of it.
+        crownEnergy = min(1, crownEnergy * 0.7 + min(1, speed / 12) * 0.7)
+        crownEndedAt = now
       }
       // minimumDistance 0 so a resting finger disturbs the dust immediately —
       // the reference responds to contact, not to movement.
