@@ -120,6 +120,40 @@ final class RunModel {
     }
   }
 
+  /// True while the connect-time self measurement is in flight, so a meter
+  /// can read "measuring" instead of the falsely settled "unmeasured".
+  private(set) var isAutoBenchmarking = false
+  /// The connect-time measurement fires at most once per launch; a node that
+  /// stops and resumes serving does not re-measure.
+  private var autoBenchmarkAttempted = false
+
+  /// A node that joins the fleet unmeasured measures itself, so its card
+  /// reads a real tok/s like every probed neighbour instead of "unmeasured"
+  /// until the first dispatched turn. AutoBenchmark holds the guard rules;
+  /// the caller passes the served rate because the server belongs to the
+  /// view, not this model.
+  func autoBenchmarkOnConnect(servedRate: Double) async {
+    let weightsReady: Bool
+    #if canImport(MLX) && !targetEnvironment(simulator)
+      weightsReady = backend != .onDevice || MLXWriter.isDownloaded(MLXPolicy.model)
+    #else
+      weightsReady = backend != .onDevice
+    #endif
+    guard
+      AutoBenchmark.shouldRun(
+        hasBenchmark: benchmark != nil,
+        servedRate: servedRate,
+        liveRate: tokensPerSecondLive,
+        running: isRunning,
+        weightsReady: weightsReady,
+        alreadyAttempted: autoBenchmarkAttempted)
+    else { return }
+    autoBenchmarkAttempted = true
+    isAutoBenchmarking = true
+    await runBenchmark()
+    isAutoBenchmarking = false
+  }
+
   /// Measures this device alone. Separate from `run` because a document run
   /// mixes planner latency, network, and retries into the number — useless for
   /// comparing hardware.

@@ -46,6 +46,16 @@
     /// When this listener came up, for uptime.
     public private(set) var servingSince: Date?
 
+    /// Fills an empty served-rate with a self-measured one, so a node that
+    /// benchmarked itself at connect reports a real tok/s to probes before
+    /// its first dispatched turn. A real served rate always outranks the
+    /// seed: this writes only while nothing has been served, and serving
+    /// overwrites it.
+    public func seedRate(_ rate: Double) {
+      guard lastTokensPerSecond == 0, rate > 0 else { return }
+      lastTokensPerSecond = rate
+    }
+
     /// Snapshot for the profile payload.
     public var load: NodeLoad {
       NodeLoad(

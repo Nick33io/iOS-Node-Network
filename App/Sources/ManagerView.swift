@@ -137,6 +137,7 @@ struct ManagerView: View {
         // manager that mostly does not.
         ensureServer().start()
         UserDefaults.standard.set(true, forKey: "node.wasServing")
+        autoMeasureOnConnect()
         // Serving unattended is the whole point of a docked tablet, and the
         // idle timer is what makes it possible. Pinning it here is also what
         // promotes this node to permanent while it is on power.
@@ -224,7 +225,9 @@ struct ManagerView: View {
 
       Meter(
         key: "throughput",
-        value: selfRate > 0 ? String(format: "%.1f tok/s", selfRate) : "unmeasured",
+        value: selfRate > 0
+          ? String(format: "%.1f tok/s", selfRate)
+          : node.isAutoBenchmarking ? "measuring" : "unmeasured",
         // Same 80 tok/s ceiling the phone panel and the node cards use, so a
         // glance across manager, self, and fleet compares like for like.
         fraction: min(1, selfRate / 80)
@@ -265,6 +268,7 @@ struct ManagerView: View {
           } else {
             ensureServer().start()
         UserDefaults.standard.set(true, forKey: "node.wasServing")
+            autoMeasureOnConnect()
           }
         }
         .font(.system(.caption, design: .monospaced).weight(.semibold))
@@ -278,6 +282,17 @@ struct ManagerView: View {
     }
     .padding(16)
     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+  }
+
+  /// One self measurement when this node comes up unmeasured, its result
+  /// then seeded into the server so probes from the rest of the fleet read
+  /// a real tok/s for this device too. AutoBenchmark holds the guards — a
+  /// served rate, an earlier benchmark, or a live run all suppress it.
+  private func autoMeasureOnConnect() {
+    Task {
+      await node.autoBenchmarkOnConnect(servedRate: server?.lastTokensPerSecond ?? 0)
+      if let rate = node.benchmark?.tokensPerSecond { server?.seedRate(rate) }
+    }
   }
 
   /// The self node with its meter fed from local serving stats. Only fills
@@ -390,6 +405,7 @@ struct ManagerView: View {
               // meter is probe-fed; without this the iPad's own module read
               // "unmeasured" forever while it was serving turns.
               node: node.isSelf ? Self.withSelfRate(node, rate: selfRate) : node,
+              measuring: node.isSelf && self.node.isAutoBenchmarking,
               refresh: { Task { await fleet.refresh(node) } },
               measure: { Task { await fleet.measure(node) } },
               testLink: { Task { await fleet.testLink(node) } },
@@ -542,6 +558,8 @@ struct ManagerView: View {
 
 private struct NodeCard: View {
   let node: FleetNode
+  /// True only on the self card while its connect-time measurement runs.
+  var measuring = false
   let refresh: () -> Void
   let measure: () -> Void
   let testLink: () -> Void
@@ -581,7 +599,7 @@ private struct NodeCard: View {
           .frame(height: 4)
         }
       } else {
-        Text("unmeasured")
+        Text(measuring ? "measuring" : "unmeasured")
           .font(.system(.caption, design: .monospaced))
           .foregroundStyle(.tertiary)
       }

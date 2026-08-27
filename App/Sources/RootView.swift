@@ -82,6 +82,7 @@ struct RootView: View {
       if UserDefaults.standard.bool(forKey: Self.wasServingKey) {
         ensureServer().start()
         screen.hold()
+        autoMeasureOnConnect()
       }
       // Test hook: lets a harness exercise a full run without driving the UI.
       guard ProcessInfo.processInfo.arguments.contains("-autorun") else { return }
@@ -144,6 +145,7 @@ struct RootView: View {
             // holding the screen are the same decision.
             screen.hold()
             UserDefaults.standard.set(true, forKey: Self.wasServingKey)
+            autoMeasureOnConnect()
           }
         }
         .font(.system(.caption, design: .monospaced).weight(.semibold))
@@ -153,6 +155,17 @@ struct RootView: View {
   }
 
   @discardableResult
+  /// One self measurement when this node comes up unmeasured, its result
+  /// then seeded into the server so probes from the rest of the fleet read
+  /// a real tok/s for this device too. AutoBenchmark holds the guards — a
+  /// served rate, an earlier benchmark, or a live run all suppress it.
+  private func autoMeasureOnConnect() {
+    Task {
+      await model.autoBenchmarkOnConnect(servedRate: server?.lastTokensPerSecond ?? 0)
+      if let rate = model.benchmark?.tokensPerSecond { server?.seedRate(rate) }
+    }
+  }
+
   private func ensureServer() -> NodeServer {
     if let server { return server }
     let created = NodeServer(
