@@ -5,6 +5,11 @@ struct PulseView: View {
   @State private var touchPoint: CGPoint?
   @State private var lastTouchPoint: CGPoint = .zero
   @State private var touchEndedAt = Date.distantPast
+  /// Raw crown position. Continuous, so it never hits a stop.
+  @State private var crown: Double = 0
+  /// Rolling measure of how hard the dial is being turned, 0...1.
+  @State private var crownEnergy: Double = 0
+  @State private var crownEndedAt = Date.distantPast
 
   var body: some View {
     ZStack {
@@ -41,11 +46,37 @@ struct PulseView: View {
       engaged: watcher.engaged,
       transitionedAt: watcher.transitionedAt,
       touch: touchPoint,
-      touchEndedAt: touchEndedAt
+      touchEndedAt: touchEndedAt,
+      crownEnergy: crownEnergy,
+      crownEndedAt: crownEndedAt
     )
     view.lastTouchPoint = lastTouchPoint
     return
       view
+      /*
+       * The crown excites the dust (owner-directed 2026-08-26). Energy
+       * accumulates with how fast the dial moves and bleeds away between
+       * ticks, so a slow turn glows and a fast spin goes fully neon. The
+       * field owns the ease-out: this only records how hard, and when last
+       * — it never has to be told to stop.
+       */
+      .focusable()
+      .digitalCrownRotation(
+        $crown,
+        from: -100_000,
+        through: 100_000,
+        by: 0.01,
+        sensitivity: .high,
+        isContinuous: true,
+        isHapticFeedbackEnabled: false
+      )
+      .onChange(of: crown) { previous, current in
+        let travelled = abs(current - previous)
+        // Decay first, then add: holding still between ticks settles the
+        // cloud even while the crown still has focus.
+        crownEnergy = min(1, crownEnergy * 0.82 + travelled * 6)
+        crownEndedAt = Date()
+      }
       // minimumDistance 0 so a resting finger disturbs the dust immediately —
       // the reference responds to contact, not to movement.
       .gesture(

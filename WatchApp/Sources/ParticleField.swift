@@ -29,10 +29,16 @@ struct ParticleField: View {
   let touch: CGPoint?
   /// When the last touch lifted, for the ease-out.
   let touchEndedAt: Date
+  /// How hard the crown was just turned, 0...1. Held while turning.
+  var crownEnergy: Double = 0
+  /// The moment of the last crown movement, for the ease-out.
+  var crownEndedAt: Date = .distantPast
 
   private static let count = 1400
   /// Alpha is quantised to these bands so batching survives the shimmer.
   private static let alphaBands: [Double] = [0.16, 0.38, 0.62, 0.92]
+  /// Crown excitement fades over this long once the dial stops moving.
+  private static let crownDecay: TimeInterval = 1.4
 
   var body: some View {
     TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { timeline in
@@ -48,11 +54,23 @@ struct ParticleField: View {
     let progress = min(1, max(0, now.timeIntervalSince(transitionedAt) / 1.5))
     let activation = engaged ? progress : 1 - progress
 
+    // Crown excitement: while the dial turns the cloud lights up in neon and
+    // spins hard; when it stops it eases back to the resting palette rather
+    // than snapping, the same shape as the touch ease-out.
+    let sinceCrown = now.timeIntervalSince(crownEndedAt)
+    let excitement =
+      sinceCrown < Self.crownDecay
+      ? crownEnergy * pow(1 - sinceCrown / Self.crownDecay, 1.5)
+      : 0
+
     let center = CGPoint(x: size.width / 2, y: size.height / 2)
-    let cloudRadius = min(size.width, size.height) * 0.42
+    // Excitement blows the cloud outward a little, so the whole field reads
+    // as energised rather than just recoloured.
+    let cloudRadius = min(size.width, size.height) * (0.42 + 0.10 * excitement)
 
     // Slow tumble: a steady spin with a lazy precession, like the reference.
-    let spin = time * 0.14
+    // The crown drives it far faster while it is turning.
+    let spin = time * (0.14 + 2.6 * excitement)
     let tilt = 0.45 + 0.18 * sin(time * 0.05)
 
     // Touch influence decays over 1.1 s after the finger lifts.
@@ -91,10 +109,12 @@ struct ParticleField: View {
       var py = radius * cosPhi
       var pz = radius * sinPhi * sin(theta)
 
-      // Per-particle breathing so the dust never sits still.
-      px += 0.03 * sin(time * 0.7 + seed * 2.1)
-      py += 0.03 * sin(time * 0.9 + seed * 1.3)
-      pz += 0.03 * cos(time * 0.8 + seed * 1.7)
+      // Per-particle breathing so the dust never sits still. Excitement
+      // widens the breath into a genuine jitter.
+      let breath = 0.03 + 0.09 * excitement
+      px += breath * sin(time * (0.7 + 6 * excitement) + seed * 2.1)
+      py += breath * sin(time * (0.9 + 6 * excitement) + seed * 1.3)
+      pz += breath * cos(time * (0.8 + 6 * excitement) + seed * 1.7)
 
       // Tumble: rotate about Y (spin), then X (tilt).
       let x1 = px * cos(spin) + pz * sin(spin)
@@ -140,7 +160,8 @@ struct ParticleField: View {
     }
 
     for bucket in 0..<3 {
-      let color = Self.color(bucket: bucket, activation: activation)
+      let color = Self.color(
+        bucket: bucket, activation: activation, excitement: excitement, time: time)
       for band in 0..<Self.alphaBands.count {
         context.fill(
           batches[bucket * Self.alphaBands.count + band],
@@ -156,9 +177,34 @@ struct ParticleField: View {
   /// Stored by the parent alongside `touchEndedAt`.
   var lastTouchPoint: CGPoint = .zero
 
+  /// Full-saturation hue wheel, for the crown's neon. Returns RGB so the
+  /// result can be blended numerically with the resting palette; SwiftUI's
+  /// Color cannot be interpolated after the fact.
+  private static func neon(hue: Double) -> (Double, Double, Double) {
+    let h = fract(hue) * 6
+    let sector = floor(h)
+    let f = h - sector
+    switch Int(sector) % 6 {
+    case 0: return (1, f, 0)
+    case 1: return (1 - f, 1, 0)
+    case 2: return (0, 1, f)
+    case 3: return (0, 1 - f, 1)
+    case 4: return (f, 0, 1)
+    default: return (1, 0, 1 - f)
+    }
+  }
+
   /// Idle: white / ice blue / violet, the pairing-screen wash. Working: three
   /// greens. Blended by activation so the shift is weather, not a cut.
-  private static func color(bucket: Int, activation: Double) -> Color {
+  ///
+  /// Turning the crown blends the whole thing toward neon (owner-directed
+  /// 2026-08-26). The hue rolls with time and each bucket sits a third of the
+  /// wheel apart, so an excited cloud is three travelling neons at once
+  /// rather than one flat colour — and it returns to this palette on its own
+  /// as the excitement decays.
+  private static func color(
+    bucket: Int, activation: Double, excitement: Double, time: Double
+  ) -> Color {
     let idle: (Double, Double, Double) =
       bucket == 0
       ? (0.90, 0.93, 1.00)  // white
@@ -171,10 +217,19 @@ struct ParticleField: View {
       : bucket == 1
         ? (0.28, 0.86, 0.48)  // mid green
         : (0.10, 0.58, 0.32)  // deep green
+    let resting = (
+      idle.0 + (working.0 - idle.0) * activation,
+      idle.1 + (working.1 - idle.1) * activation,
+      idle.2 + (working.2 - idle.2) * activation
+    )
+    guard excitement > 0 else {
+      return Color(red: resting.0, green: resting.1, blue: resting.2)
+    }
+    let lit = neon(hue: time * 0.55 + Double(bucket) / 3)
     return Color(
-      red: idle.0 + (working.0 - idle.0) * activation,
-      green: idle.1 + (working.1 - idle.1) * activation,
-      blue: idle.2 + (working.2 - idle.2) * activation
+      red: resting.0 + (lit.0 - resting.0) * excitement,
+      green: resting.1 + (lit.1 - resting.1) * excitement,
+      blue: resting.2 + (lit.2 - resting.2) * excitement
     )
   }
 }
