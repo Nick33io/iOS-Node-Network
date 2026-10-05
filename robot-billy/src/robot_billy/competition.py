@@ -1,6 +1,7 @@
-"""One round of the six-bot competition.
+"""One round of the competition.
 
-Paper mode books Jupiter's quoted amounts and does not sign.
+D33P deploys a strategy to each of six agents. Each agent's bot then decides
+the buy or sell. Paper mode books Jupiter's quoted amounts and does not sign.
 Live mode signs the /order transaction and submits it to /execute.
 """
 
