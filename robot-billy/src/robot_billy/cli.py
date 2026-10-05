@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("status")
+    sub.add_parser("agents")
     quote = sub.add_parser("quote")
     quote.add_argument("--amount", type=int, default=10_000_000, help="probe size in SOL lamports")
 
@@ -48,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "status":
             return _status()
+        if args.command == "agents":
+            return _agents()
         if args.command == "quote":
             return _quote(args.amount)
         if args.command == "round":
@@ -82,6 +85,12 @@ def _jupiter() -> JupiterClient:
 def _status() -> int:
     desk = _desk()
     print(json.dumps(desk.snapshot(), indent=2))
+    return 0
+
+
+def _agents() -> int:
+    desk = _desk()
+    print(json.dumps(desk.state.agents or {"convened": False}, indent=2))
     return 0
 
 

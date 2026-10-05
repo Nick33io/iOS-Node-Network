@@ -48,6 +48,16 @@ That command can spend USDC from the wallet. A failed landing leaves a pending f
 python -m robot_billy clear-pending --i-confirmed-the-swap-failed
 ```
 
+## Agents
+
+Three seats meet before every round:
+
+- **D33P** reads the last two recorded prices and proposes one versioned strategy set. It cannot approve that proposal.
+- **VALUE** accepts the proposal only when the prices were actually quoted and the proposal does not raise the spending cap. It suspends a strategy whose bots are down by the daily-loss limit together. It cannot invent a price.
+- **Fleet** places entries only for strategies VALUE left enabled. It cannot rewrite the cap or ignore a rejection. Exits still run for a suspended strategy.
+
+`python -m robot_billy agents` prints the current revision. The status page shows the same seats.
+
 ## Rules the field actually enforces
 
 - Six bots: two momentum, two pullback, two range. Each can spend only its own cash.

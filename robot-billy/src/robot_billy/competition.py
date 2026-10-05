@@ -13,6 +13,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from robot_billy.agents import Board
 from robot_billy.gate import GateError, Limits, check_order
 from robot_billy.jupiter import (
     SOL_DECIMALS,
@@ -167,6 +168,7 @@ class Desk:
             "last_error": self.state.last_error,
             "bots": bots,
             "trades": [trade.to_json() for trade in self.state.trades[-20:]],
+            "agents": self.state.agents,
         }
 
 
@@ -264,7 +266,9 @@ def run_round(
     if price is None:
         raise JupiterError("probe quote did not contain a SOL/USDC price")
     desk.note_price(price)
-    decisions = desk.plan(price, moment)
+    board = Board()
+    board.convene(desk.state, desk.limits)
+    decisions = [item for item in desk.plan(price, moment) if board.fleet.allow(item, desk.state)]
     wallet_usdc = None
     if mode == "live":
         assert wallet is not None

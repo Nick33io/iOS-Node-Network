@@ -206,6 +206,7 @@ class FieldState:
     trades: list[TradeRecord] = field(default_factory=list)
     pending: dict | None = None
     last_error: str | None = None
+    agents: dict | None = None
 
     def bot(self, bot_id: str) -> Bot:
         for candidate in self.bots:
@@ -222,6 +223,7 @@ class FieldState:
             "trades": [trade.to_json() for trade in self.trades],
             "pending": self.pending,
             "last_error": self.last_error,
+            "agents": self.agents,
         }
 
     @classmethod
@@ -233,4 +235,5 @@ class FieldState:
             trades=[TradeRecord.from_json(item) for item in raw.get("trades", [])],
             pending=raw.get("pending"),
             last_error=raw.get("last_error"),
+            agents=raw.get("agents"),
         )

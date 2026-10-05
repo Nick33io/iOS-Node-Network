@@ -78,6 +78,9 @@ def _page(snapshot: dict) -> str:
     price = snapshot.get("last_price")
     price_text = f"{price:.4f}" if isinstance(price, (int, float)) else "—"
     error = _esc(snapshot.get("last_error") or "")
+    agents = snapshot.get("agents") or {}
+    enabled = ", ".join(agents.get("enabled") or []) or "not convened"
+    suspended = ", ".join(agents.get("suspended") or []) or "none"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -97,6 +100,7 @@ button {{ background:#2C3131; color:#F3F5F5; border:0; padding:8px 12px; cursor:
 <h1>roBot billy.</h1>
 <p>Paper competition. Live swaps are not available from this page.</p>
 <p>SOL/USDC {price_text}. Day {_esc(snapshot.get("day"))}. {error}</p>
+<p>D33P proposes. VALUE revision {_esc(agents.get("revision", 0))}. Enabled {_esc(enabled)}. Suspended {_esc(suspended)}. Fleet entries {"blocked" if agents.get("entries_blocked") else "open"}.</p>
 <table>
 <thead><tr><th>Bot</th><th>Strategy</th><th>Cash</th><th>Today</th><th>Lifetime</th><th>Equity</th><th>SOL atoms</th><th>Status</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
