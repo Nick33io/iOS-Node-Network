@@ -1,8 +1,10 @@
 """One round of the competition.
 
-D33P deploys a strategy to each of six agents. Each agent's bot then decides
-the buy or sell. Paper mode books Jupiter's quoted amounts and does not sign.
-Live mode signs the /order transaction and submits it to /execute.
+D33P proposes a strategy for each of six agents. VALUE accepts or rejects it.
+F#CKING runs only the accepted version, and each agent's bot then decides the
+buy or sell. VALUE audits the fills. Paper mode books Jupiter's quoted amounts
+and does not sign. Live mode signs the /order transaction and submits it to
+/execute.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from robot_billy.agents import Board, agent_for_bot, bot_execution_spec
+from robot_billy.agents import Board, agent_for_bot, bot_execution_spec, strategy_version
 from robot_billy.gate import GateError, Limits, check_order
 from robot_billy.jupiter import (
     SOL_DECIMALS,
@@ -271,7 +273,7 @@ def run_round(
     desk.note_price(price)
     board = Board()
     board.convene(desk.state, desk.limits)
-    decisions = [item for item in desk.plan(price, moment) if board.operations.allow(item, desk.state)]
+    decisions = [item for item in desk.plan(price, moment) if board.fucking.allow(item, desk.state)]
     wallet_usdc = None
     if mode == "live":
         assert wallet is not None
@@ -287,6 +289,8 @@ def run_round(
         if mode == "live" and decision.side == "buy" and outcome.get("status") == "filled":
             assert wallet_usdc is not None
             wallet_usdc -= int(outcome["in_amount"])
+    filled = sum(1 for item in results if item.get("status") == "filled")
+    board.record_audit(desk.state, filled)
     skipped = [item for item in results if item.get("status") == "skipped"]
     if desk.state.pending is None and skipped:
         desk.state.last_error = str(skipped[-1].get("reason") or "order skipped")
@@ -389,6 +393,7 @@ def _book(
         signature=signature,
         paper=paper,
         price=price,
+        strategy_version=strategy_version(desk.state, bot.bot_id),
     )
     if decision.side == "buy":
         desk.apply_buy(bot, replace(decision, spend_micro=in_amount), out_amount, price, now, trade)

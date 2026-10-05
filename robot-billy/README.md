@@ -50,12 +50,27 @@ python -m robot_billy clear-pending --i-confirmed-the-swap-failed
 
 ## Agents
 
-Three managers sit over six competition agents. Each competition agent has one bot.
+The team is DEEPF#CKINGVALUE. That charter is not stored in this repository. It lives in the ChatGPT share and was described as Mac files (`AGENTS.md`, `CODEX-HANDOFF.md`, `d33p_agent.py`, `value_agent.py`) that are not on this machine. The runtime below follows that flow on spot SOL/USDC.
 
-- **D33P** trains a strategy ranking from the last two recorded prices and deploys one strategy onto each of the six competition agents.
-- **Assist** accepts that deployment only when it covers all six agents, the prices were actually quoted, and the spending cap does not rise. It suspends a competition agent that is down by the daily-loss limit. It cannot invent a price.
-- **Operations** runs the round. It opens new trades only for agents Assist left active, and it cannot rewrite the cap. Exits still run for a suspended agent.
-- **Bots** decide the buy and the sell from the strategy deployed to their agent: momentum, pullback, or range, with that strategy's entry, stop, and time limit.
+Each round is propose, evaluate, operate, audit.
+
+- **D33P** proposes a strategy ranking from the last two recorded prices and names one strategy for each of the six competition agents. D33P cannot accept its own proposal.
+- **VALUE** accepts that deployment only when it covers all six agents, the prices were actually quoted, and the spending cap does not rise. It suspends a competition agent that is down by the daily-loss limit. After the round it audits the fill count and the book PnL and that report is what the owner sees. VALUE cannot invent a price.
+- **F#CKING** operates only the version VALUE accepted. It opens new trades only for agents VALUE left active, and it cannot rewrite the cap, ignore a rejection, or grade the round. Exits still run when entries are blocked.
+- **CRO** blocks every new entry when the book's today PnL is at or past the daily-loss limit.
+- **Bots** decide the buy and the sell from the strategy deployed to their agent. Each fill is stamped `strategy@revision`.
+
+Specialist seats from the charter are listed on the book and left honest:
+
+| Seat | Status |
+| --- | --- |
+| Ares (bidirectional momentum, EMA/RSI/ATR, shorts) | untested; those series and a short venue are not wired |
+| Cronos (delta-neutral funding carry) | untested; no funding feed and no perp book |
+| Hermes (router) | spot only; Jupiter SOL/USDC quotes, Pyth is not consulted |
+| CRO (hard drawdown veto) | active on the book PnL |
+| Cascade (liquidation sniping) | untested; no liquidation feed |
+
+Perp leverage from the charter stays off. This desk does not open shorts, funding carries, or liquidation snipes.
 
 `python -m robot_billy agents` prints the managers, the six deployments, and the latest round. The status page shows the same stack.
 

@@ -86,6 +86,12 @@ def _page(snapshot: dict) -> str:
         if record.get("suspended")
     ]
     suspended = ", ".join(suspended_ids) or "none"
+    cro = agents.get("cro") or {}
+    cro_text = "veto" if cro.get("veto") else "clear"
+    specialist_text = ", ".join(
+        f"{item.get('name')} {item.get('status')}"
+        for item in agents.get("specialists") or []
+    ) or "none seated"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -105,7 +111,8 @@ button {{ background:#2C3131; color:#F3F5F5; border:0; padding:8px 12px; cursor:
 <h1>roBot billy.</h1>
 <p>Paper competition. Live swaps are not available from this page.</p>
 <p>SOL/USDC {price_text}. Day {_esc(snapshot.get("day"))}. {error}</p>
-<p>D33P trains and deploys. Assist revision {_esc(agents.get("revision", 0))}. Operations entries {"blocked" if agents.get("entries_blocked") else "open"}. Suspended {_esc(suspended)}.</p>
+<p>{_esc(agents.get("team") or "DEEPF#CKINGVALUE")}. D33P proposes. VALUE revision {_esc(agents.get("revision", 0))}. F#CKING entries {"blocked" if agents.get("entries_blocked") else "open"}. CRO {_esc(cro_text)}. Suspended {_esc(suspended)}.</p>
+<p>Specialists: {_esc(specialist_text)}.</p>
 <table>
 <thead><tr><th>Agent</th><th>Bot</th><th>Strategy</th><th>Cash</th><th>Today</th><th>Lifetime</th><th>Equity</th><th>SOL atoms</th><th>Status</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>

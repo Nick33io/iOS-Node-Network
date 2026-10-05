@@ -178,6 +178,7 @@ class TradeRecord:
     signature: str | None
     paper: bool
     price: float
+    strategy_version: str | None = None
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -195,6 +196,7 @@ class TradeRecord:
             signature=raw.get("signature"),
             paper=bool(raw["paper"]),
             price=float(raw["price"]),
+            strategy_version=raw.get("strategy_version"),
         )
 
 

@@ -29,6 +29,7 @@ class HttpTests(unittest.TestCase):
             page = urlopen(f"http://127.0.0.1:{port}/").read().decode()
             self.assertIn("roBot billy.", page)
             self.assertIn("Live swaps are not available", page)
+            self.assertIn("DEEPF#CKINGVALUE", page)
             status = json.loads(urlopen(f"http://127.0.0.1:{port}/api/status").read())
             self.assertEqual(len(status["bots"]), 6)
             request = Request(f"http://127.0.0.1:{port}/api/paper-round", method="POST")
