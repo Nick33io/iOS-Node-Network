@@ -50,13 +50,14 @@ python -m robot_billy clear-pending --i-confirmed-the-swap-failed
 
 ## Agents
 
-Three seats meet before every round:
+Three managers sit over six competition agents. Each competition agent has one bot.
 
-- **D33P** reads the last two recorded prices and proposes one versioned strategy set. It cannot approve that proposal.
-- **VALUE** accepts the proposal only when the prices were actually quoted and the proposal does not raise the spending cap. It suspends a strategy whose bots are down by the daily-loss limit together. It cannot invent a price.
-- **Fleet** places entries only for strategies VALUE left enabled. It cannot rewrite the cap or ignore a rejection. Exits still run for a suspended strategy.
+- **D33P** trains a strategy ranking from the last two recorded prices and deploys one strategy onto each of the six competition agents.
+- **Assist** accepts that deployment only when it covers all six agents, the prices were actually quoted, and the spending cap does not rise. It suspends a competition agent that is down by the daily-loss limit. It cannot invent a price.
+- **Operations** runs the round. It opens new trades only for agents Assist left active, and it cannot rewrite the cap. Exits still run for a suspended agent.
+- **Bots** decide the buy and the sell from the strategy deployed to their agent: momentum, pullback, or range, with that strategy's entry, stop, and time limit.
 
-`python -m robot_billy agents` prints the current revision. The status page shows the same seats.
+`python -m robot_billy agents` prints the managers, the six deployments, and the latest round. The status page shows the same stack.
 
 ## Rules the field actually enforces
 

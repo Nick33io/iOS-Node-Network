@@ -44,9 +44,9 @@ class CompetitionTests(unittest.TestCase):
         self.assertEqual(wallet.signed, [])
         self.assertEqual(jupiter.executions, [])
         filled = [item for item in snapshot["results"] if item["status"] == "filled"]
-        self.assertEqual(sorted(item["bot_id"] for item in filled), ["momentum-1", "momentum-4"])
+        self.assertEqual(sorted(item["bot_id"] for item in filled), ["momentum-1", "pullback-2"])
         self.assertEqual(book.state.bot("momentum-1").cash_micro, usd(950))
-        self.assertEqual(book.state.bot("pullback-2").cash_micro, usd(1000))
+        self.assertEqual(book.state.bot("range-3").cash_micro, usd(1000))
 
     def test_live_is_refused_without_the_confirmation(self):
         jupiter = FakeJupiter()

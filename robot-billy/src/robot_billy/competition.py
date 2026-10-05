@@ -13,7 +13,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from robot_billy.agents import Board
+from robot_billy.agents import Board, agent_for_bot, bot_execution_spec
 from robot_billy.gate import GateError, Limits, check_order
 from robot_billy.jupiter import (
     SOL_DECIMALS,
@@ -32,8 +32,6 @@ LIVE_CONFIRM = "I_UNDERSTAND_THIS_CAN_LOSE_FUNDS"
 PROBE_LAMPORTS = 10_000_000  # 0.01 SOL, quote only
 MIN_TRADE_MICRO = usd(5)
 PRICE_HISTORY = 8
-STOPS = {"momentum": 0.04, "pullback": 0.04, "range": 0.03}
-HOLD_SECONDS = {"momentum": 60 * 60, "pullback": 90 * 60, "range": 45 * 60}
 
 
 class LiveDisabled(RuntimeError):
@@ -120,13 +118,14 @@ class Desk:
     def plan(self, price: float, now: float) -> list[Decision]:
         decisions: list[Decision] = []
         for bot in self.state.bots:
-            exit_decision = plan_exit(bot, price, self.previous_price, self.state.prices, now)
+            spec = bot_execution_spec(self.state, bot)
+            exit_decision = plan_exit(bot, price, self.previous_price, self.state.prices, now, spec)
             if exit_decision is not None:
                 decisions.append(exit_decision)
                 continue
             if bot.today_pnl_micro <= -self.limits.max_daily_loss_micro:
                 continue
-            entry = plan_entry(bot, price, self.previous_price, self.limits)
+            entry = plan_entry(bot, price, self.previous_price, self.limits, spec)
             if entry is not None:
                 decisions.append(entry)
         return decisions
@@ -147,9 +146,11 @@ class Desk:
         for bot in self.state.bots:
             sol_atoms = bot.position.atoms if bot.position and bot.position.mint == SOL_MINT else 0
             sol_value = int(sol_atoms / 10**SOL_DECIMALS * price * USDC_MICRO) if price else 0
+            record = agent_for_bot(self.state, bot.bot_id)
             bots.append(
                 {
                     "bot_id": bot.bot_id,
+                    "agent_id": record["id"] if record else None,
                     "strategy": bot.strategy,
                     "cash_usdc": bot.cash_micro / USDC_MICRO,
                     "reserved_usdc": bot.reserved_micro / USDC_MICRO,
@@ -172,13 +173,13 @@ class Desk:
         }
 
 
-def plan_exit(bot: Bot, price: float, previous: float | None, history: list[float], now: float) -> Decision | None:
+def plan_exit(bot: Bot, price: float, previous: float | None, history: list[float], now: float, spec: dict) -> Decision | None:
     position = bot.position
     if position is None or position.mint != SOL_MINT or position.entry_px <= 0:
         return None
     position.high_px = max(position.high_px, price)
-    stop = STOPS.get(bot.strategy, 0.04)
-    hold = HOLD_SECONDS.get(bot.strategy, 60 * 60)
+    stop = float(spec["stop"])
+    hold = int(spec["hold_seconds"])
     change = price / position.entry_px - 1
     rising = previous is not None and price >= previous
     if price <= position.entry_px * (1 - stop):
@@ -192,23 +193,24 @@ def plan_exit(bot: Bot, price: float, previous: float | None, history: list[floa
             half = max(1, position.atoms // 2)
             return _sell_decision(bot, half, "take half at +10%")
         return _sell_decision(bot, position.atoms, "take full at +10%")
-    if bot.strategy == "range" and history:
+    if spec["strategy"] == "range" and history:
         average = sum(history) / len(history)
         if price >= average and price > position.entry_px:
             return _sell_decision(bot, position.atoms, "back to average")
     return None
 
 
-def plan_entry(bot: Bot, price: float, previous: float | None, limits: Limits) -> Decision | None:
+def plan_entry(bot: Bot, price: float, previous: float | None, limits: Limits, spec: dict) -> Decision | None:
     if bot.position is not None or previous is None or previous <= 0:
         return None
     ratio = price / previous
+    entry_ratio = float(spec["entry_ratio"])
     reason = None
-    if bot.strategy == "momentum" and ratio >= 1.002:
+    if spec["strategy"] == "momentum" and ratio >= entry_ratio:
         reason = "momentum break"
-    elif bot.strategy == "pullback" and 0.98 < ratio < 0.995:
+    elif spec["strategy"] == "pullback" and 0.98 < ratio < entry_ratio:
         reason = "pullback reclaim"
-    elif bot.strategy == "range" and ratio <= 0.99:
+    elif spec["strategy"] == "range" and ratio <= entry_ratio:
         reason = "range discount"
     if reason is None:
         return None
@@ -268,7 +270,7 @@ def run_round(
     desk.note_price(price)
     board = Board()
     board.convene(desk.state, desk.limits)
-    decisions = [item for item in desk.plan(price, moment) if board.fleet.allow(item, desk.state)]
+    decisions = [item for item in desk.plan(price, moment) if board.operations.allow(item, desk.state)]
     wallet_usdc = None
     if mode == "live":
         assert wallet is not None

@@ -65,6 +65,7 @@ def _page(snapshot: dict) -> str:
     for bot in snapshot.get("bots", []):
         rows.append(
             "<tr>"
+            f"<td>{_esc(bot.get('agent_id') or '')}</td>"
             f"<td>{_esc(bot['bot_id'])}</td>"
             f"<td>{_esc(bot['strategy'])}</td>"
             f"<td>{bot['cash_usdc']:.2f}</td>"
@@ -79,8 +80,12 @@ def _page(snapshot: dict) -> str:
     price_text = f"{price:.4f}" if isinstance(price, (int, float)) else "—"
     error = _esc(snapshot.get("last_error") or "")
     agents = snapshot.get("agents") or {}
-    enabled = ", ".join(agents.get("enabled") or []) or "not convened"
-    suspended = ", ".join(agents.get("suspended") or []) or "none"
+    suspended_ids = [
+        record["id"]
+        for record in agents.get("competition_agents") or []
+        if record.get("suspended")
+    ]
+    suspended = ", ".join(suspended_ids) or "none"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,9 +105,9 @@ button {{ background:#2C3131; color:#F3F5F5; border:0; padding:8px 12px; cursor:
 <h1>roBot billy.</h1>
 <p>Paper competition. Live swaps are not available from this page.</p>
 <p>SOL/USDC {price_text}. Day {_esc(snapshot.get("day"))}. {error}</p>
-<p>D33P proposes. VALUE revision {_esc(agents.get("revision", 0))}. Enabled {_esc(enabled)}. Suspended {_esc(suspended)}. Fleet entries {"blocked" if agents.get("entries_blocked") else "open"}.</p>
+<p>D33P trains and deploys. Assist revision {_esc(agents.get("revision", 0))}. Operations entries {"blocked" if agents.get("entries_blocked") else "open"}. Suspended {_esc(suspended)}.</p>
 <table>
-<thead><tr><th>Bot</th><th>Strategy</th><th>Cash</th><th>Today</th><th>Lifetime</th><th>Equity</th><th>SOL atoms</th><th>Status</th></tr></thead>
+<thead><tr><th>Agent</th><th>Bot</th><th>Strategy</th><th>Cash</th><th>Today</th><th>Lifetime</th><th>Equity</th><th>SOL atoms</th><th>Status</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
 </table>
 <p><button id="round" type="button">Run paper round</button></p>
