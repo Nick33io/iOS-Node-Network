@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robot-billy"
+version = "0.1.0"
+description = "Six-bot trading competition that quotes and, when explicitly enabled, swaps through Jupiter."
+requires-python = ">=3.11"
+dependencies = ["solders==0.26.0"]
+
+[project.scripts]
+robot-billy = "robot_billy.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
