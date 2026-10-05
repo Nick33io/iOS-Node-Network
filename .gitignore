@@ -6,6 +6,10 @@ xcuserdata/
 .DS_Store
 .env
 .env.local
+robot-billy/var/
+*.egg-info/
+__pycache__/
+*.pyc
 
 # XcodeGen output — regenerate with `cd App && xcodegen generate`
 App/NodeNetwork.xcodeproj/
